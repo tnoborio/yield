@@ -1,3 +1,5 @@
 {:deps {org.clojure/clojure {:mvn/version "1.12.3"}
-        org.duct-framework/main {:mvn/version "0.4.3"}}
+        org.duct-framework/main {:mvn/version "0.4.3"}
+        duct/module.sql {:mvn/version "0.6.1"}
+        org.postgresql/postgresql {:mvn/version "42.7.5"}}
  :aliases {:duct {:main-opts ["-m" "duct.main"]}}}
