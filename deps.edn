@@ -1,0 +1,3 @@
+{:deps {org.clojure/clojure {:mvn/version "1.12.3"}
+        org.duct-framework/main {:mvn/version "0.4.3"}}
+ :aliases {:duct {:main-opts ["-m" "duct.main"]}}}
