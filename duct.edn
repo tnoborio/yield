@@ -1,3 +1,2 @@
 {:system
- {:duct.module/sql
-  {:database-url "jdbc:postgresql://localhost:5432/yield_dev?user=yield&password=yield"}}}
+ {:duct.module/sql {}}}

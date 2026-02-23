@@ -7,3 +7,5 @@
 .vscode
 .calva
 .dir-locals.el
+.env
+.envrc
