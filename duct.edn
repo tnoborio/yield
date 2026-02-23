@@ -1,2 +1,6 @@
 {:system
- {:duct.module/sql {}}}
+ {:duct.module/logging {}
+  :duct.module/sql {}
+  :duct.module/web
+  {:features #{:api}
+   :routes [["/" {:get :yield.handler/index}]]}}}
