@@ -16,3 +16,6 @@ static/css
 static/js/app.js
 static/js/app.js.map
 static/js/app.css
+static/js/cljs-runtime
+static/js/manifest.edn
+.shadow-cljs

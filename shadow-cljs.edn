@@ -1,0 +1,9 @@
+{:deps true
+ :source-paths ["dev"]
+ :builds
+ {:app {:target :browser
+        :output-dir "static/js"
+        :asset-path "/js"
+        :modules {:app {:entries [yield.app]
+                        :init-fn yield.app/init}}
+        :devtools {:after-load yield.app/init}}}}
