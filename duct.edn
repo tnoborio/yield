@@ -1,10 +1,70 @@
 {:system
  {:duct.module/logging {}
-  :duct.module/sql {}
+
+  :duct.module/sql
+  {:migrations
+   [{:id   "001-create-users"
+     :up   ["CREATE TABLE users (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), email VARCHAR(255) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"]
+     :down ["DROP TABLE IF EXISTS users"]}
+    {:id   "002-create-password-reset-tokens"
+     :up   ["CREATE TABLE password_reset_tokens (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, token VARCHAR(255) NOT NULL UNIQUE, expires_at TIMESTAMPTZ NOT NULL, used BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT now())"]
+     :down ["DROP TABLE IF EXISTS password_reset_tokens"]}
+    {:id   "003-create-graphs"
+     :up   ["CREATE TABLE graphs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"]
+     :down ["DROP TABLE IF EXISTS graphs"]}
+    {:id   "004-create-nodes"
+     :up   ["CREATE TABLE nodes (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), graph_id UUID NOT NULL REFERENCES graphs(id) ON DELETE CASCADE, node_id VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL DEFAULT 'editable', position_x DOUBLE PRECISION NOT NULL, position_y DOUBLE PRECISION NOT NULL, label TEXT NOT NULL DEFAULT '', UNIQUE(graph_id, node_id))"]
+     :down ["DROP TABLE IF EXISTS nodes"]}
+    {:id   "005-create-edges"
+     :up   ["CREATE TABLE edges (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), graph_id UUID NOT NULL REFERENCES graphs(id) ON DELETE CASCADE, edge_id VARCHAR(255) NOT NULL, source_node_id VARCHAR(255) NOT NULL, target_node_id VARCHAR(255) NOT NULL, UNIQUE(graph_id, edge_id))"]
+     :down ["DROP TABLE IF EXISTS edges"]}]}
+
   :duct.module/cljs
   {:builds {:app {:entries [yield.app]
                   :init-fn yield.app/init}}}
+
   :duct.module/web
   {:features #{:site :hiccup}
    :routes [["/" {:get :yield.handler/index}]
-            ["/greeting" {:get :yield.handler/greeting}]]}}}
+            ["/greeting" {:get :yield.handler/greeting}]
+            ["/login" {:get  :yield.handler.auth/login-page
+                       :post :yield.handler.auth/login-submit}]
+            ["/register" {:get  :yield.handler.auth/register-page
+                          :post :yield.handler.auth/register-submit}]
+            ["/reset-password" {:get  :yield.handler.auth/reset-password-page
+                                :post :yield.handler.auth/reset-password-submit}]
+            ["/reset-password/:token" {:get :yield.handler.auth/reset-password-token-page}]
+            ["/reset-password-confirm" {:post :yield.handler.auth/reset-password-confirm}]
+            ["/logout" {:post :yield.handler.auth/logout}]
+            ["/api/graphs" {:get  :yield.handler.graph/list
+                            :post :yield.handler.graph/create}]
+            ["/api/graphs/:id" {:get    :yield.handler.graph/get-data
+                                :delete :yield.handler.graph/delete}]
+            ["/api/graphs/:id/save" {:put :yield.handler.graph/save-data}]]}
+
+  :yield.handler.auth/login-submit
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.auth/register-submit
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.auth/reset-password-submit
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.auth/reset-password-confirm
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.graph/list
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.graph/create
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.graph/get-data
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.graph/delete
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.graph/save-data
+  {:db #ig/ref :duct.database/sql}}}
