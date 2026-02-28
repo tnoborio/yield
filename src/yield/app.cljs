@@ -17,6 +17,7 @@
 (defonce nodes (r/atom initial-nodes))
 (defonce edges (r/atom initial-edges))
 (defonce node-id-counter (atom 3))
+(defonce panel-open? (r/atom false))
 
 (defn update-node-label [nodes-array node-id new-label]
   (.map nodes-array
@@ -74,34 +75,70 @@
                         :y (+ 100 (* 30 offset))}
          :data #js {:label (str "Node " id)}}))
 
+(defn- get-root-data [attr]
+  (some-> (.getElementById js/document "react-flow-root")
+          (.getAttribute attr)))
+
+(defn- sidebar []
+  (let [user-email (get-root-data "data-user-email")
+        csrf-token (get-root-data "data-csrf-token")]
+    [:div {:class "flex flex-col h-full bg-white shadow-lg"
+           :style {:width "260px"}}
+     [:div {:class "flex items-center justify-between p-4 border-b border-gray-200"}
+      [:span {:class "text-sm font-semibold text-gray-700"} "Menu"]
+      [:button {:class "text-gray-400 hover:text-gray-600"
+                :on-click #(reset! panel-open? false)}
+       "\u2715"]]
+     [:div {:class "flex-1 p-4"}
+      [:div {:class "text-xs text-gray-500 mb-1"} "Logged in as"]
+      [:div {:class "text-sm font-medium text-gray-800 truncate"} user-email]]
+     [:div {:class "p-4 border-t border-gray-200"}
+      [:form {:method "POST" :action "/logout"}
+       [:input {:type "hidden" :name "__anti-forgery-token" :value csrf-token}]
+       [:button {:type "submit"
+                 :class "w-full px-4 py-2 text-sm text-red-600 border border-red-300 rounded-md hover:bg-red-50 font-medium"}
+        "Logout"]]]]))
+
 (defn app []
-  [:> ReactFlow
-   {:nodes @nodes
-    :edges @edges
-    :onNodesChange (fn [changes] (swap! nodes #(applyNodeChanges changes %)))
-    :onEdgesChange (fn [changes] (swap! edges #(applyEdgeChanges changes %)))
-    :onConnect (fn [params] (swap! edges #(addEdge params %)))
-    :deleteKeyCode #js ["Backspace" "Delete"]
-    :nodeTypes node-types
-    :fitView true}
-   [:> Background]
-   [:> Controls]
-   [:> Panel {:position "top-right"}
-    [:button
-     {:on-click (fn [_e]
-                  (swap! nodes #(.concat % #js [(make-node)])))
-      :style {:padding "8px 16px"
-              :background "#4f46e5"
-              :color "white"
-              :border "none"
-              :border-radius "6px"
-              :cursor "pointer"
-              :font-size "14px"}}
-     "Add Node"]]])
+  [:<>
+   (when @panel-open?
+     [:div {:class "absolute top-0 left-0 h-full z-50"}
+      [sidebar]])
+   [:> ReactFlow
+    {:nodes @nodes
+     :edges @edges
+     :onNodesChange (fn [changes] (swap! nodes #(applyNodeChanges changes %)))
+     :onEdgesChange (fn [changes] (swap! edges #(applyEdgeChanges changes %)))
+     :onConnect (fn [params] (swap! edges #(addEdge params %)))
+     :deleteKeyCode #js ["Backspace" "Delete"]
+     :nodeTypes node-types
+     :fitView true}
+    [:> Background]
+    [:> Controls]
+    [:> Panel {:position "top-left"}
+     (when-not @panel-open?
+       [:button
+        {:on-click #(reset! panel-open? true)
+         :class "bg-white shadow-md rounded-md px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
+         :style {:font-size "18px" :line-height "1"}}
+        "\u2630"])]
+    [:> Panel {:position "top-right"}
+     [:button
+      {:on-click (fn [_e]
+                   (swap! nodes #(.concat % #js [(make-node)])))
+       :style {:padding "8px 16px"
+               :background "#4f46e5"
+               :color "white"
+               :border "none"
+               :border-radius "6px"
+               :cursor "pointer"
+               :font-size "14px"}}
+      "Add Node"]]]])
 
 (defonce root (atom nil))
 
 (defn ^:after-load init []
-  (when-not @root
-    (reset! root (rdc/create-root (.getElementById js/document "react-flow-root"))))
-  (rdc/render @root [app]))
+  (when-let [el (.getElementById js/document "react-flow-root")]
+    (when-not @root
+      (reset! root (rdc/create-root el)))
+    (rdc/render @root [app])))

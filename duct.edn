@@ -1,10 +1,41 @@
 {:system
  {:duct.module/logging {}
-  :duct.module/sql {}
+
+  :duct.module/sql
+  {:migrations
+   [{:id   "001-create-users"
+     :up   ["CREATE TABLE users (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), email VARCHAR(255) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"]
+     :down ["DROP TABLE IF EXISTS users"]}
+    {:id   "002-create-password-reset-tokens"
+     :up   ["CREATE TABLE password_reset_tokens (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, token VARCHAR(255) NOT NULL UNIQUE, expires_at TIMESTAMPTZ NOT NULL, used BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT now())"]
+     :down ["DROP TABLE IF EXISTS password_reset_tokens"]}]}
+
   :duct.module/cljs
   {:builds {:app {:entries [yield.app]
                   :init-fn yield.app/init}}}
+
   :duct.module/web
   {:features #{:site :hiccup}
    :routes [["/" {:get :yield.handler/index}]
-            ["/greeting" {:get :yield.handler/greeting}]]}}}
+            ["/greeting" {:get :yield.handler/greeting}]
+            ["/login" {:get  :yield.handler.auth/login-page
+                       :post :yield.handler.auth/login-submit}]
+            ["/register" {:get  :yield.handler.auth/register-page
+                          :post :yield.handler.auth/register-submit}]
+            ["/reset-password" {:get  :yield.handler.auth/reset-password-page
+                                :post :yield.handler.auth/reset-password-submit}]
+            ["/reset-password/:token" {:get :yield.handler.auth/reset-password-token-page}]
+            ["/reset-password-confirm" {:post :yield.handler.auth/reset-password-confirm}]
+            ["/logout" {:post :yield.handler.auth/logout}]]}
+
+  :yield.handler.auth/login-submit
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.auth/register-submit
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.auth/reset-password-submit
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.auth/reset-password-confirm
+  {:db #ig/ref :duct.database/sql}}}
