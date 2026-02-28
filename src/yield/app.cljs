@@ -6,7 +6,7 @@
             ["@xyflow/react/dist/style.css"]))
 
 (def initial-nodes
-  #js [#js {:id "node-1" :position #js {:x 100 :y 100} :data #js {:label "Start5"}}
+  #js [#js {:id "node-1" :position #js {:x 100 :y 100} :data #js {:label "Start8"}}
        #js {:id "node-2" :position #js {:x 100 :y 250} :data #js {:label "Process"}}
        #js {:id "node-3" :position #js {:x 300 :y 250} :data #js {:label "End"}}])
 
@@ -30,7 +30,7 @@
 
 (defonce root (atom nil))
 
-(defn init []
+(defn ^:after-load init []
   (when-not @root
     (reset! root (rdc/create-root (.getElementById js/document "react-flow-root"))))
   (rdc/render @root [app]))
