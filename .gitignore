@@ -9,3 +9,4 @@
 .dir-locals.el
 .env
 .envrc
+.lsp
