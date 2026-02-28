@@ -7,6 +7,7 @@
         org.duct-framework/module.web {:mvn/version "0.13.4"}
         org.duct-framework/module.sql {:mvn/version "0.9.0"}
         org.postgresql/postgresql {:mvn/version "42.7.10"}
-        buddy/buddy-hashers {:mvn/version "2.0.167"}}
+        buddy/buddy-hashers {:mvn/version "2.0.167"}
+        org.clojure/data.json {:mvn/version "2.5.1"}}
  :aliases {:duct {:main-opts ["-m" "duct.main"]}
            :dev  {:main-opts ["-m" "duct.main" "--nrepl" "--cider"]}}}
