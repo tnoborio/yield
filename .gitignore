@@ -11,3 +11,5 @@
 .envrc
 .lsp
 .claude
+node_modules
+static/css
