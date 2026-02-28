@@ -3,9 +3,20 @@
   "scripts": {
     "css:build": "tailwindcss --input stylesheets/input.css --output static/css/output.css",
     "css:watch": "tailwindcss --input stylesheets/input.css --output static/css/output.css --watch",
-    "css:minify": "tailwindcss --input stylesheets/input.css --output static/css/output.css --minify"
+    "css:minify": "tailwindcss --input stylesheets/input.css --output static/css/output.css --minify",
+    "js:build": "esbuild js/app.jsx --bundle --jsx=automatic --format=iife --outfile=static/js/app.js --platform=browser",
+    "js:watch": "esbuild js/app.jsx --bundle --jsx=automatic --format=iife --outfile=static/js/app.js --platform=browser --watch",
+    "js:minify": "esbuild js/app.jsx --bundle --jsx=automatic --format=iife --outfile=static/js/app.js --platform=browser --minify --sourcemap",
+    "dev": "npm run css:watch & npm run js:watch",
+    "build": "npm run css:minify && npm run js:minify"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.2.1"
+    "@tailwindcss/cli": "^4.2.1",
+    "esbuild": "^0.27.3"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.10.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   }
 }
