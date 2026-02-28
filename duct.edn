@@ -2,5 +2,6 @@
  {:duct.module/logging {}
   :duct.module/sql {}
   :duct.module/web
-  {:features #{:api}
-   :routes [["/" {:get :yield.handler/index}]]}}}
+  {:features #{:site :hiccup}
+   :routes [["/" {:get :yield.handler/index}]
+            ["/greeting" {:get :yield.handler/greeting}]]}}}
