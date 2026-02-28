@@ -1,0 +1,5 @@
+{
+  "calva.jackInEnv": {
+    "JDBC_DATABASE_URL": "jdbc:postgresql://localhost:5432/yield_dev?user=yield&password=yield"
+  }
+}
