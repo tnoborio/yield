@@ -20,7 +20,7 @@
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1.0"}]
     [:title (or title "Yield")]
     [:link {:rel "stylesheet" :href "/css/output.css"}]
-    [:link {:rel "stylesheet" :href "/js/app.css"}]
+    [:link {:rel "stylesheet" :href "/css/reactflow.css"}]
     [:script {:src "/js/htmx.min.js"}]]
    (into [:body {:class "m-0 overflow-hidden"
                  :hx-headers "{\"X-Ring-Anti-Forgery\": \"true\"}"}]
@@ -30,7 +30,7 @@
   (editor-layout {:title "Yield"}
     [:div {:id "react-flow-root"
            :class "w-screen h-screen"}]
-    [:script {:src "/js/app.js"}]))
+    [:script {:src "/cljs/app.js"}]))
 
 (defn greeting [_request]
   {:status 200

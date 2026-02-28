@@ -20,12 +20,11 @@
 (integrant.repl/set-prep!
  (fn []
    (let [cfg (read-config)
-         prepped (config/prep cfg {:main true})]
+         prepped (config/prep cfg {})]
      (ig/load-namespaces prepped)
-     prepped)))
+     ;; ClojureScript compilation is handled by Calva's shadow-cljs Jack-in
+     (dissoc prepped :duct.compiler.cljs.shadow/server))))
 
 (defn go [] (integrant.repl/go))
 (defn halt [] (integrant.repl/halt))
 (defn reset [] (integrant.repl/reset))
-(defn system [] integrant.repl.state/system)
-(defn config [] integrant.repl.state/config)

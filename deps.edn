@@ -1,9 +1,8 @@
 {:paths ["src" "dev"]
  :deps {org.clojure/clojure {:mvn/version "1.12.3"}
-        thheller/shadow-cljs {:mvn/version "3.3.6"}
-        org.clojure/clojurescript {:mvn/version "1.12.134"}
         reagent/reagent {:mvn/version "1.3.0"}
         org.duct-framework/main {:mvn/version "0.4.3"}
+        org.duct-framework/module.cljs {:mvn/version "0.5.2"}
         org.duct-framework/module.logging {:mvn/version "0.6.6"}
         org.duct-framework/module.web {:mvn/version "0.13.4"}
         org.duct-framework/module.sql {:mvn/version "0.9.0"}

@@ -1,6 +1,6 @@
 # Yield
 
-A web application built with Duct Framework + ClojureScript (shadow-cljs / Reagent).
+A web application built with [Duct Framework](https://duct-framework.org/) + ClojureScript / [Reagent](https://reagent-project.github.io/).
 
 ## Prerequisites
 
@@ -40,6 +40,8 @@ docker compose up -d
 4. **Open browser**
    http://localhost:3000
 
+Both CLJ and CLJS REPLs are available. You can evaluate `.clj` and `.cljs` files directly from the editor.
+
 ### REPL Commands
 
 ```clojure
@@ -51,22 +53,20 @@ docker compose up -d
 ### Terminal
 
 ```sh
-# ClojureScript watch + Tailwind CSS watch
-npm run dev
-
-# Start Duct server in a separate terminal
+# Start Duct server with nREPL
 clj -M:dev
 ```
 
-## Build
+## Production Build
 
 ```sh
 npm run build
+clj -M:duct --main
 ```
 
 ## Tech Stack
 
-- **Backend**: Clojure / [Duct Framework](https://github.com/duct-framework) / Ring / Hiccup
-- **Frontend**: ClojureScript / [shadow-cljs](https://shadow-cljs.github.io/docs/UsersGuide.html) / [Reagent](https://reagent-project.github.io/) / [React Flow](https://reactflow.dev/)
+- **Backend**: Clojure / [Duct Framework](https://duct-framework.org/) / Ring / Hiccup
+- **Frontend**: ClojureScript / [Reagent](https://reagent-project.github.io/) / [React Flow](https://reactflow.dev/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Database**: PostgreSQL

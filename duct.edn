@@ -1,6 +1,9 @@
 {:system
  {:duct.module/logging {}
   :duct.module/sql {}
+  :duct.module/cljs
+  {:builds {:app {:entries [yield.app]
+                  :init-fn yield.app/init}}}
   :duct.module/web
   {:features #{:site :hiccup}
    :routes [["/" {:get :yield.handler/index}]

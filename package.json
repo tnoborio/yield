@@ -4,18 +4,16 @@
     "css:build": "tailwindcss --input stylesheets/input.css --output static/css/output.css",
     "css:watch": "tailwindcss --input stylesheets/input.css --output static/css/output.css --watch",
     "css:minify": "tailwindcss --input stylesheets/input.css --output static/css/output.css --minify",
-    "js:build": "shadow-cljs release app",
-    "js:watch": "shadow-cljs watch app",
-    "copy:css": "cp node_modules/@xyflow/react/dist/style.css static/js/app.css",
-    "dev": "npm run copy:css && npm run css:watch & npm run js:watch",
-    "build": "npm run copy:css && npm run css:minify && shadow-cljs release app"
+    "copy:css": "cp node_modules/@xyflow/react/dist/style.css static/css/reactflow.css",
+    "postinstall": "npm run copy:css",
+    "build": "npm run css:minify"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.2.1",
-    "shadow-cljs": "^3.3.6"
+    "@tailwindcss/cli": "^4.2.1"
   },
   "dependencies": {
     "@xyflow/react": "^12.10.1",
+    "process": "^0.11.10",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   }

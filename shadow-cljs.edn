@@ -1,9 +1,9 @@
+;; Development only - used by Calva Jack-in for CLJS REPL.
+;; Production builds are handled by duct.module/cljs.
 {:deps true
- :source-paths ["dev"]
  :builds
  {:app {:target :browser
-        :output-dir "static/js"
-        :asset-path "/js"
+        :output-dir "target/cljs"
+        :asset-path "/cljs"
         :modules {:app {:entries [yield.app]
-                        :init-fn yield.app/init}}
-        :devtools {:after-load yield.app/init}}}}
+                        :init-fn yield.app/init}}}}}
