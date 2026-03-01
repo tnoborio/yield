@@ -4,8 +4,10 @@
 
 (defprotocol GraphDatabase
   (list-graphs [db user-id])
+  (list-all-graphs [db])
   (create-graph! [db user-id graph-name])
   (find-graph [db graph-id user-id])
+  (find-graph-by-id [db graph-id])
   (delete-graph! [db graph-id])
   (get-nodes [db graph-id])
   (get-edges [db graph-id])
@@ -20,6 +22,13 @@
        (parse-uuid user-id)]
       {:builder-fn rs/as-unqualified-kebab-maps}))
 
+  (list-all-graphs [db]
+    (jdbc/execute! db
+      ["SELECT g.id, g.name, g.created_at, g.updated_at, u.email AS user_email
+        FROM graphs g JOIN users u ON u.id = g.user_id
+        ORDER BY g.created_at"]
+      {:builder-fn rs/as-unqualified-kebab-maps}))
+
   (create-graph! [db user-id graph-name]
     (jdbc/execute-one! db
       ["INSERT INTO graphs (user_id, name) VALUES (?, ?) RETURNING id, name, created_at, updated_at"
@@ -30,6 +39,12 @@
     (jdbc/execute-one! db
       ["SELECT id, name, user_id, created_at, updated_at FROM graphs WHERE id = ? AND user_id = ?"
        (parse-uuid graph-id) (parse-uuid user-id)]
+      {:builder-fn rs/as-unqualified-kebab-maps}))
+
+  (find-graph-by-id [db graph-id]
+    (jdbc/execute-one! db
+      ["SELECT id, name, user_id, created_at, updated_at FROM graphs WHERE id = ?"
+       (parse-uuid graph-id)]
       {:builder-fn rs/as-unqualified-kebab-maps}))
 
   (delete-graph! [db graph-id]
