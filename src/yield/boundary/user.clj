@@ -1,5 +1,6 @@
 (ns yield.boundary.user
   (:require [next.jdbc :as jdbc]
+            [next.jdbc.date-time]
             [next.jdbc.result-set :as rs]))
 
 (defprotocol UserDatabase

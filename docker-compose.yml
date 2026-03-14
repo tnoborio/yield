@@ -6,9 +6,24 @@ services:
       POSTGRES_USER: yield
       POSTGRES_PASSWORD: yield
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yield -d yield_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    ports:
+      - "5050:3000"
+    environment:
+      DATABASE_URL: "jdbc:postgresql://postgres:5432/yield_dev?user=yield&password=yield"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:

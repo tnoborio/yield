@@ -2,7 +2,8 @@
  {:duct.module/logging {}
 
   :duct.module/sql
-  {:migrations
+  {:database-url "jdbc:postgresql://localhost:15432/yield_dev?user=yield&password=yield"
+   :migrations
    [{:id   "001-create-users"
      :up   ["CREATE TABLE users (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), email VARCHAR(255) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"]
      :down ["DROP TABLE IF EXISTS users"]}
@@ -17,14 +18,18 @@
      :down ["DROP TABLE IF EXISTS nodes"]}
     {:id   "005-create-edges"
      :up   ["CREATE TABLE edges (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), graph_id UUID NOT NULL REFERENCES graphs(id) ON DELETE CASCADE, edge_id VARCHAR(255) NOT NULL, source_node_id VARCHAR(255) NOT NULL, target_node_id VARCHAR(255) NOT NULL, UNIQUE(graph_id, edge_id))"]
-     :down ["DROP TABLE IF EXISTS edges"]}]}
+     :down ["DROP TABLE IF EXISTS edges"]}
+    {:id   "006-create-todos"
+     :up   ["CREATE TABLE todos (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, title VARCHAR(500) NOT NULL, description TEXT NOT NULL DEFAULT '', status VARCHAR(20) NOT NULL DEFAULT 'ready' CHECK (status IN ('done', 'ready', 'in_progress', 'wait', 'reject', 'arts')), category VARCHAR(20) NOT NULL DEFAULT 'private' CHECK (category IN ('private', 'keystone', 'sasara', 'contract', 'toeic')), due_date DATE, position INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"]
+     :down ["DROP TABLE IF EXISTS todos"]}]}
 
   :duct.module/cljs
   {:builds {:app {:entries [yield.app]
                   :init-fn yield.app/init}}}
 
   :duct.module/web
-  {:features #{:site :hiccup}
+  {:port 5001
+   :features #{:site :hiccup}
    :routes [["/" {:get :yield.handler/index}]
             ["/greeting" {:get :yield.handler/greeting}]
             ["/login" {:get  :yield.handler.auth/login-page
@@ -40,7 +45,12 @@
                             :post :yield.handler.graph/create}]
             ["/api/graphs/:id" {:get    :yield.handler.graph/get-data
                                 :delete :yield.handler.graph/delete}]
-            ["/api/graphs/:id/save" {:put :yield.handler.graph/save-data}]]}
+            ["/api/graphs/:id/save" {:put :yield.handler.graph/save-data}]
+            ["/api/todos"          {:get  :yield.handler.todo/list
+                                    :post :yield.handler.todo/create}]
+            ["/api/todo-reorder"   {:put :yield.handler.todo/reorder}]
+            ["/api/todos/:id"      {:put    :yield.handler.todo/update
+                                    :delete :yield.handler.todo/delete}]]}
 
   :yield.handler.auth/login-submit
   {:db #ig/ref :duct.database/sql}
@@ -67,4 +77,19 @@
   {:db #ig/ref :duct.database/sql}
 
   :yield.handler.graph/save-data
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.todo/list
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.todo/create
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.todo/update
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.todo/delete
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.todo/reorder
   {:db #ig/ref :duct.database/sql}}}

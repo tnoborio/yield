@@ -5,6 +5,7 @@
             [org.clojars.roklenarcic.mcp-server.handler.init :as h.init]
             [next.jdbc :as jdbc]
             [yield.boundary.graph :as graph-db]
+            [yield.boundary.todo :as todo-db]
             [yield.boundary.user :as user-db]
             [clojure.data.json :as json]
             [clojure.string :as str])
@@ -64,6 +65,50 @@
       (json/write-str {:ok true :deleted graph_id}))
     (core/tool-error (str "Graph not found: " graph_id))))
 
+;; ── TODO Tool Handlers ───────────────────────────────────────
+
+(defn- format-todo [todo]
+  (update-vals todo str))
+
+(defn- handle-list-todos [db _exchange {:keys [user_email]}]
+  (if user_email
+    (if-let [user (user-db/find-user-by-email db user_email)]
+      (let [todos (todo-db/list-todos db (str (:id user)) {})]
+        (json/write-str {:todos (mapv format-todo todos)}))
+      (core/tool-error (str "User not found: " user_email)))
+    (let [todos (todo-db/list-all-todos db)]
+      (json/write-str {:todos (mapv format-todo todos)}))))
+
+(defn- handle-create-todo [db _exchange {:keys [user_email title description status category due_date]}]
+  (if-let [user (user-db/find-user-by-email db user_email)]
+    (let [todo (todo-db/create-todo! db (str (:id user))
+                {:title       title
+                 :description description
+                 :status      status
+                 :category    category
+                 :due-date    due_date})]
+      (json/write-str {:todo (format-todo todo)}))
+    (core/tool-error (str "User not found: " user_email))))
+
+(defn- handle-update-todo [db _exchange {:keys [todo_id title description status category due_date]}]
+  (if-let [_todo (todo-db/find-todo-by-id db todo_id)]
+    (let [changes (cond-> {}
+                    title       (assoc :title title)
+                    description (assoc :description description)
+                    status      (assoc :status status)
+                    category    (assoc :category category)
+                    due_date    (assoc :due-date due_date))
+          updated (todo-db/update-todo! db todo_id changes)]
+      (json/write-str {:todo (format-todo (or updated _todo))}))
+    (core/tool-error (str "Todo not found: " todo_id))))
+
+(defn- handle-delete-todo [db _exchange {:keys [todo_id]}]
+  (if-let [_todo (todo-db/find-todo-by-id db todo_id)]
+    (do
+      (todo-db/delete-todo! db todo_id)
+      (json/write-str {:ok true :deleted todo_id}))
+    (core/tool-error (str "Todo not found: " todo_id))))
+
 ;; ── Tool Definitions ───────────────────────────────────────────
 
 (defn- make-tools [db]
@@ -120,7 +165,50 @@
     (server/obj-schema nil
       {:graph_id (server/str-schema "UUID of the graph to delete" nil)}
       ["graph_id"])
-    (partial handle-delete-graph db))])
+    (partial handle-delete-graph db))
+
+   ;; TODO tools
+   (server/tool
+    "list_todos"
+    "List all TODOs. Optionally filter by user email."
+    (server/obj-schema nil
+      {:user_email (server/str-schema "Email of the user (optional, lists all if omitted)" nil)}
+      [])
+    (partial handle-list-todos db))
+
+   (server/tool
+    "create_todo"
+    "Create a new TODO for a user"
+    (server/obj-schema nil
+      {:user_email  (server/str-schema "Email of the user" nil)
+       :title       (server/str-schema "Title of the TODO" nil)
+       :description (server/str-schema "Description (optional)" nil)
+       :status      (server/str-schema "Status: done, ready, in_progress, wait, reject, arts (default: ready)" nil)
+       :category    (server/str-schema "Category: private, keystone, sasara, contract, toeic (default: private)" nil)
+       :due_date    (server/str-schema "Due date in YYYY-MM-DD format (optional)" nil)}
+      ["user_email" "title"])
+    (partial handle-create-todo db))
+
+   (server/tool
+    "update_todo"
+    "Update an existing TODO. Only provided fields are updated."
+    (server/obj-schema nil
+      {:todo_id     (server/str-schema "UUID of the TODO to update" nil)
+       :title       (server/str-schema "New title (optional)" nil)
+       :description (server/str-schema "New description (optional)" nil)
+       :status      (server/str-schema "New status: done, ready, in_progress, wait, reject, arts (optional)" nil)
+       :category    (server/str-schema "New category: private, keystone, sasara, contract, toeic (optional)" nil)
+       :due_date    (server/str-schema "New due date in YYYY-MM-DD format (optional)" nil)}
+      ["todo_id"])
+    (partial handle-update-todo db))
+
+   (server/tool
+    "delete_todo"
+    "Delete a TODO"
+    (server/obj-schema nil
+      {:todo_id (server/str-schema "UUID of the TODO to delete" nil)}
+      ["todo_id"])
+    (partial handle-delete-todo db))])
 
 ;; ── Main ───────────────────────────────────────────────────────
 
@@ -128,8 +216,8 @@
   (let [db      (make-datasource)
         serde   (mcp-json/serde {})
         info    (server/server-info
-                 "Yield Graph Editor" "1.0.0"
-                 "MCP server for the Yield graph editor. Read, create, and modify graphs with nodes and edges.")
+                 "Yield" "1.1.0"
+                 "MCP server for Yield. Manage graphs (nodes/edges) and TODOs (tasks with status, category, due dates).")
         session (reduce server/add-tool
                         (server/make-session info serde {})
                         (make-tools db))]
