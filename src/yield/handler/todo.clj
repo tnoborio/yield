@@ -27,25 +27,30 @@
   (if-let [user-id (require-auth request)]
     (let [params (:query-params request)
           opts {:status   (get params "status")
-                :category (get params "category")}]
+                :category (get params "category")
+                :list-id  (get params "list_id")}]
       (json-response {:todos (mapv format-todo (todo-db/list-todos db user-id opts))}))
     (-> (json-response {:error "Unauthorized"})
         (response/status 401))))
 
 (defn create-todo [db request]
   (if-let [user-id (require-auth request)]
-    (let [{:keys [title description status category due_date]} (parse-body request)]
+    (let [{:keys [title description status category due_date list_id]} (parse-body request)]
       (if (or (nil? title) (empty? title))
         (-> (json-response {:error "Title is required"})
             (response/status 400))
-        (let [todo (todo-db/create-todo! db user-id
-                     {:title       title
-                      :description description
-                      :status      status
-                      :category    category
-                      :due-date    due_date})]
-          (-> (json-response {:todo (format-todo todo)})
-              (response/status 201)))))
+        (if (nil? list_id)
+          (-> (json-response {:error "list_id is required"})
+              (response/status 400))
+          (let [todo (todo-db/create-todo! db user-id
+                       {:title       title
+                        :description description
+                        :status      status
+                        :category    category
+                        :due-date    due_date
+                        :list-id     list_id})]
+            (-> (json-response {:todo (format-todo todo)})
+                (response/status 201))))))
     (-> (json-response {:error "Unauthorized"})
         (response/status 401))))
 

@@ -25,10 +25,13 @@
   javax.sql.DataSource
   (list-todos [db user-id opts]
     (let [[filter-sql filter-params] (build-filter-clause opts)
-          sql (str "SELECT id, title, description, status, category, due_date, position, created_at, updated_at FROM todos WHERE user_id = ?"
-                   filter-sql
-                   " ORDER BY position, created_at")
-          params (into [(parse-uuid user-id)] filter-params)]
+          list-id (:list-id opts)
+          base-sql "SELECT id, title, description, status, category, due_date, position, created_at, updated_at FROM todos WHERE user_id = ?"
+          [list-sql list-params] (if list-id
+                                   [" AND list_id = ?" [(parse-uuid list-id)]]
+                                   ["" []])
+          sql (str base-sql list-sql filter-sql " ORDER BY position, created_at")
+          params (into [(parse-uuid user-id)] (concat list-params filter-params))]
       (jdbc/execute! db (into [sql] params)
         {:builder-fn rs/as-unqualified-kebab-maps})))
 
@@ -41,18 +44,20 @@
 
   (create-todo! [db user-id todo-data]
     (let [uid (parse-uuid user-id)
-          {:keys [title description status category due-date]} todo-data]
+          {:keys [title description status category due-date list-id]} todo-data
+          lid (parse-uuid list-id)]
       (jdbc/execute-one! db
-        [(str "INSERT INTO todos (user_id, title, description, status, category, due_date, position) "
-              "VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM todos WHERE user_id = ?)) "
+        [(str "INSERT INTO todos (user_id, list_id, title, description, status, category, due_date, position) "
+              "VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM todos WHERE list_id = ?)) "
               "RETURNING id, title, description, status, category, due_date, position, created_at, updated_at")
          uid
+         lid
          title
          (or description "")
          (or status "ready")
          (or category "private")
          due-date
-         uid]
+         lid]
         {:builder-fn rs/as-unqualified-kebab-maps})))
 
   (find-todo [db todo-id user-id]
