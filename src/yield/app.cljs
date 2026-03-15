@@ -745,24 +745,29 @@
      "Add Node"]]])
 
 (defn app []
-  [:<>
-   (when @panel-open?
-     [:div {:class "absolute top-0 left-0 h-full z-50"}
-      [sidebar]])
-   (case @current-view
-     :list
-     [:div {:class "h-full flex flex-col"}
-      [:div {:class "flex items-center gap-2 p-2 bg-white border-b border-gray-200"}
-       (when-not @panel-open?
-         [:button
-          {:on-click #(reset! panel-open? true)
-           :class "bg-white shadow-md rounded-md px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-           :style {:font-size "18px" :line-height "1"}}
-          "\u2630"])]
-      [:div {:class "flex-1 overflow-hidden"}
-       [list-view]]]
-     ;; default: graph view
-     [graph-view])])
+  [:div {:class "flex h-full"}
+   ;; Sidebar – width animates between 0 and 260px, pushing content
+   [:div {:style {:width (if @panel-open? "260px" "0px")
+                  :min-width (if @panel-open? "260px" "0px")
+                  :transition "width 0.3s ease-in-out, min-width 0.3s ease-in-out"
+                  :overflow "hidden"}}
+    [sidebar]]
+   ;; Main content
+   [:div {:class "flex-1 h-full overflow-hidden"}
+    (case @current-view
+      :list
+      [:div {:class "h-full flex flex-col"}
+       [:div {:class "flex items-center gap-2 p-2 bg-white border-b border-gray-200"}
+        (when-not @panel-open?
+          [:button
+           {:on-click #(reset! panel-open? true)
+            :class "bg-white shadow-md rounded-md px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
+            :style {:font-size "18px" :line-height "1"}}
+           "\u2630"])]
+       [:div {:class "flex-1 overflow-hidden"}
+        [list-view]]]
+      ;; default: graph view
+      [graph-view])]])
 
 ;; ── Init ────────────────────────────────────────────────────────
 
