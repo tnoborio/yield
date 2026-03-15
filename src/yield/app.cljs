@@ -714,24 +714,6 @@
                   :class "w-full px-4 py-2 text-sm text-red-600 border border-red-300 rounded-md hover:bg-red-50 font-medium"}
          "Logout"]]]]]))
 
-(defn- view-tabs []
-  [:div {:class "flex bg-white shadow-md rounded-md overflow-hidden"}
-   [:button {:on-click #(reset! current-view :graph)
-             :class (str "px-3 py-2 text-sm "
-                         (if (= @current-view :graph)
-                           "bg-indigo-600 text-white"
-                           "text-gray-600 hover:bg-gray-100"))}
-    "Graph"]
-   [:button {:on-click (fn []
-                         (reset! current-view :todos)
-                         (when @current-list-id
-                           (fetch-todos!)))
-             :class (str "px-3 py-2 text-sm "
-                         (if (= @current-view :todos)
-                           "bg-indigo-600 text-white"
-                           "text-gray-600 hover:bg-gray-100"))}
-    "TODOs"]])
-
 (defn- graph-view []
   [:> ReactFlow
    {:nodes @nodes
@@ -751,14 +733,12 @@
    [:> Background]
    [:> Controls]
    [:> Panel {:position "top-left"}
-    [:div {:class "flex gap-2"}
-     (when-not @panel-open?
-       [:button
-        {:on-click #(reset! panel-open? true)
-         :class "bg-white shadow-md rounded-md px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-         :style {:font-size "18px" :line-height "1"}}
-        "\u2630"])
-     [view-tabs]]]
+    (when-not @panel-open?
+      [:button
+       {:on-click #(reset! panel-open? true)
+        :class "bg-white shadow-md rounded-md px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
+        :style {:font-size "18px" :line-height "1"}}
+       "\u2630"])]
    [:> Panel {:position "top-right"}
     [:button
      {:on-click (fn [_e]
@@ -788,8 +768,7 @@
           {:on-click #(reset! panel-open? true)
            :class "bg-white shadow-md rounded-md px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
            :style {:font-size "18px" :line-height "1"}}
-          "\u2630"])
-       [view-tabs]]
+          "\u2630"])]
       [:div {:class "flex-1 overflow-hidden"}
        [todo-view]]]
      ;; default: graph view
