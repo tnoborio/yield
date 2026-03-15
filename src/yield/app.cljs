@@ -19,19 +19,30 @@
 (defonce save-timer (atom nil))
 (defonce loading? (atom false))
 
-;; TODO state
+;; Item state
 (defonce current-view (r/atom :graph))
-(defonce todos (r/atom []))
-(defonce editing-todo-id (r/atom nil))
-(defonce new-todo-title (r/atom ""))
-(defonce drag-todo-id (r/atom nil))
+(defonce items (r/atom []))
+(defonce new-item-title (r/atom ""))
+(defonce drag-item-id (r/atom nil))
 (defonce drop-target (r/atom nil)) ;; {:status s :index i}
 
-;; TODO list state
-(defonce todo-lists (r/atom []))
+;; List state
+(defonce lists (r/atom []))
 (defonce current-list-id (r/atom nil))
 (defonce creating-list? (r/atom false))
 (defonce new-list-name (r/atom ""))
+
+;; ── URL routing ───────────────────────────────────────────────
+
+(defn- push-url! [path]
+  (.pushState js/history nil "" path))
+
+(defn- parse-path []
+  (let [path (.-pathname js/location)]
+    (condp re-matches path
+      #"/graphs/([0-9a-f-]+)" :>> (fn [[_ id]] {:view :graph :id id})
+      #"/lists/([0-9a-f-]+)"  :>> (fn [[_ id]] {:view :list :id id})
+      {:view :graph :id nil})))
 
 ;; ── Helpers ─────────────────────────────────────────────────────
 
@@ -182,13 +193,14 @@
       (.then (fn [data]
                (let [d (js->clj data :keywordize-keys true)]
                  (reset! graphs (:graphs d))
-                 ;; Load the first graph if exists and none selected
                  (when (and (seq (:graphs d)) (nil? @current-graph-id))
                    (load-graph! (:id (first (:graphs d))))))))
       (.catch (fn [err] (js/console.error "Fetch graphs failed:" err)))))
 
 (defn switch-graph! [graph-id]
   (when (not= graph-id @current-graph-id)
+    (reset! current-view :graph)
+    (push-url! (str "/graphs/" graph-id))
     (-> (save-current-graph!)
         (.then (fn [_] (load-graph! graph-id))))))
 
@@ -202,7 +214,8 @@
                (let [d (js->clj data :keywordize-keys true)
                      graph (:graph d)]
                  (swap! graphs conj graph)
-                 ;; Save current graph first, then switch
+                 (reset! current-view :graph)
+                 (push-url! (str "/graphs/" (:id graph)))
                  (if @current-graph-id
                    (-> (save-current-graph!)
                        (.then (fn [_]
@@ -228,106 +241,109 @@
                  (reset! nodes #js [])
                  (reset! edges #js [])
                  (reset! node-id-counter 0)
-                 ;; Load first remaining graph if available
                  (when-let [first-graph (first @graphs)]
                    (load-graph! (:id first-graph))))))
       (.catch (fn [err] (js/console.error "Delete graph failed:" err)))))
 
-;; ── TODO List API calls ───────────────────────────────────────
+;; ── List API calls ───────────────────────────────────────────
 
-(declare fetch-todos!)
+(declare fetch-items!)
 
-(defn fetch-todo-lists! []
-  (-> (js/fetch "/api/todo-lists"
+(defn fetch-lists! []
+  (-> (js/fetch "/api/lists"
                 #js {:method "GET" :headers (clj->js (api-headers))})
       (.then (fn [res] (.json res)))
       (.then (fn [data]
                (let [d (js->clj data :keywordize-keys true)]
-                 (reset! todo-lists (:todo_lists d))
-                 (when (and (seq (:todo_lists d)) (nil? @current-list-id))
-                   (reset! current-list-id (:id (first (:todo_lists d))))
-                   (fetch-todos!)))))
-      (.catch (fn [err] (js/console.error "Fetch todo-lists failed:" err)))))
+                 (reset! lists (:lists d))
+                 (when (and (seq (:lists d)) (nil? @current-list-id))
+                   (reset! current-list-id (:id (first (:lists d))))
+                   (fetch-items!)))))
+      (.catch (fn [err] (js/console.error "Fetch lists failed:" err)))))
 
 (defn switch-list! [list-id]
   (when (not= list-id @current-list-id)
     (reset! current-list-id list-id)
-    (fetch-todos!)))
+    (reset! current-view :list)
+    (push-url! (str "/lists/" list-id))
+    (fetch-items!)))
 
-(defn create-todo-list! [list-name]
-  (-> (js/fetch "/api/todo-lists"
+(defn create-list! [list-name]
+  (-> (js/fetch "/api/lists"
                 #js {:method  "POST"
                      :headers (clj->js (api-headers))
                      :body    (js/JSON.stringify (clj->js {:name list-name}))})
       (.then (fn [res] (.json res)))
       (.then (fn [data]
                (let [d (js->clj data :keywordize-keys true)
-                     tl (:todo_list d)]
-                 (swap! todo-lists conj tl)
-                 (reset! current-list-id (:id tl))
-                 (reset! todos []))))
-      (.catch (fn [err] (js/console.error "Create todo-list failed:" err)))))
+                     l (:list d)]
+                 (swap! lists conj l)
+                 (reset! current-list-id (:id l))
+                 (reset! current-view :list)
+                 (push-url! (str "/lists/" (:id l)))
+                 (reset! items []))))
+      (.catch (fn [err] (js/console.error "Create list failed:" err)))))
 
-(defn delete-todo-list! [list-id]
-  (-> (js/fetch (str "/api/todo-lists/" list-id)
+(defn delete-list! [list-id]
+  (-> (js/fetch (str "/api/lists/" list-id)
                 #js {:method  "DELETE"
                      :headers (clj->js (api-headers))})
       (.then (fn [_]
-               (swap! todo-lists (fn [ls] (vec (remove #(= (:id %) list-id) ls))))
+               (swap! lists (fn [ls] (vec (remove #(= (:id %) list-id) ls))))
                (when (= list-id @current-list-id)
                  (reset! current-list-id nil)
-                 (reset! todos [])
-                 (when-let [first-list (first @todo-lists)]
+                 (reset! items [])
+                 (when-let [first-list (first @lists)]
                    (reset! current-list-id (:id first-list))
-                   (fetch-todos!)))))
-      (.catch (fn [err] (js/console.error "Delete todo-list failed:" err)))))
+                   (fetch-items!)))))
+      (.catch (fn [err] (js/console.error "Delete list failed:" err)))))
 
-;; ── TODO API calls ────────────────────────────────────────────
+;; ── Item API calls ────────────────────────────────────────────
 
-(defn fetch-todos! []
+(defn fetch-items! []
   (when-let [lid @current-list-id]
-    (-> (js/fetch (str "/api/todos?list_id=" lid)
+    (-> (js/fetch (str "/api/items?list_id=" lid)
                   #js {:method "GET" :headers (clj->js (api-headers))})
         (.then (fn [res] (.json res)))
         (.then (fn [data]
                  (let [d (js->clj data :keywordize-keys true)]
-                   (reset! todos (:todos d)))))
-        (.catch (fn [err] (js/console.error "Fetch todos failed:" err))))))
+                   (reset! items (:items d)))))
+        (.catch (fn [err] (js/console.error "Fetch items failed:" err))))))
 
-(defn create-todo-item! [title]
+(defn create-item! [title]
   (when-let [lid @current-list-id]
-    (-> (js/fetch "/api/todos"
+    (-> (js/fetch "/api/items"
                   #js {:method  "POST"
                        :headers (clj->js (api-headers))
                        :body    (js/JSON.stringify (clj->js {:title title :list_id lid}))})
         (.then (fn [res] (.json res)))
         (.then (fn [data]
                  (let [d (js->clj data :keywordize-keys true)]
-                   (swap! todos conj (:todo d)))))
-        (.catch (fn [err] (js/console.error "Create todo failed:" err))))))
+                   (swap! items conj (:item d)))))
+        (.catch (fn [err] (js/console.error "Create item failed:" err))))))
 
-(defn update-todo-item! [todo-id changes]
-  (-> (js/fetch (str "/api/todos/" todo-id)
+(defn update-item! [item-id changes]
+  (-> (js/fetch (str "/api/items/" item-id)
                 #js {:method  "PUT"
                      :headers (clj->js (api-headers))
                      :body    (js/JSON.stringify (clj->js changes))})
       (.then (fn [res] (.json res)))
       (.then (fn [data]
                (let [d (js->clj data :keywordize-keys true)
-                     updated (:todo d)]
-                 (swap! todos (fn [ts]
-                                (mapv #(if (= (:id %) todo-id) updated %) ts))))))
-      (.catch (fn [err] (js/console.error "Update todo failed:" err)))))
+                     updated (:item d)]
+                 (swap! items (fn [is]
+                                (mapv #(if (= (:id %) item-id) updated %) is))))))
+      (.catch (fn [err] (js/console.error "Update item failed:" err)))))
 
-(defn delete-todo-item! [todo-id]
-  (-> (js/fetch (str "/api/todos/" todo-id)
+(defn delete-item! [item-id]
+  (-> (js/fetch (str "/api/items/" item-id)
                 #js {:method  "DELETE"
                      :headers (clj->js (api-headers))})
       (.then (fn [_]
-               (swap! todos (fn [ts] (vec (remove #(= (:id %) todo-id) ts))))))
-      (.catch (fn [err] (js/console.error "Delete todo failed:" err)))))
+               (swap! items (fn [is] (vec (remove #(= (:id %) item-id) is))))))
+      (.catch (fn [err] (js/console.error "Delete item failed:" err)))))
 
-;; ── TODO UI helpers ───────────────────────────────────────────
+;; ── Item UI helpers ───────────────────────────────────────────
 
 (def status-config
   {"done"        {:label "Done"        :bg "bg-green-100"  :text "text-green-800"  :dot "bg-green-500"}
@@ -339,32 +355,32 @@
 
 (def status-order ["ready" "in_progress" "wait" "arts" "done" "reject"])
 
-;; ── TODO DnD helpers ─────────────────────────────────────────
+;; ── Item DnD helpers ─────────────────────────────────────────
 
-(defn- all-todo-ids-in-order
-  [todo-list]
-  (let [grouped (group-by :status todo-list)]
+(defn- all-item-ids-in-order
+  [item-list]
+  (let [grouped (group-by :status item-list)]
     (->> status-order
          (mapcat #(map :id (get grouped % [])))
          vec)))
 
-(defn reorder-todos! [todo-ids]
-  (-> (js/fetch "/api/todo-reorder"
+(defn reorder-items! [item-ids]
+  (-> (js/fetch "/api/item-reorder"
                 #js {:method  "PUT"
                      :headers (clj->js (api-headers))
-                     :body    (js/JSON.stringify (clj->js {:todo_ids todo-ids}))})
+                     :body    (js/JSON.stringify (clj->js {:item_ids item-ids}))})
       (.catch (fn [err]
                 (js/console.error "Reorder failed:" err)
-                (fetch-todos!)))))
+                (fetch-items!)))))
 
-(defn move-todo-to-status!
-  [todo-id new-status target-index]
-  (let [todo (first (filter #(= (:id %) todo-id) @todos))
-        old-status (:status todo)]
-    (swap! todos
-      (fn [ts]
-        (let [without (vec (remove #(= (:id %) todo-id) ts))
-              moved (assoc todo :status new-status)
+(defn move-item-to-status!
+  [item-id new-status target-index]
+  (let [item (first (filter #(= (:id %) item-id) @items))
+        old-status (:status item)]
+    (swap! items
+      (fn [is]
+        (let [without (vec (remove #(= (:id %) item-id) is))
+              moved (assoc item :status new-status)
               grouped (group-by :status without)
               target-group (get grouped new-status [])
               idx (min target-index (count target-group))
@@ -376,8 +392,8 @@
                (mapcat #(get new-grouped % []))
                vec))))
     (when (not= old-status new-status)
-      (update-todo-item! todo-id {:status new-status}))
-    (reorder-todos! (all-todo-ids-in-order @todos))))
+      (update-item! item-id {:status new-status}))
+    (reorder-items! (all-item-ids-in-order @items))))
 
 (def category-config
   {"private"  {:label "Private"  :bg "bg-slate-100"  :text "text-slate-700"}
@@ -389,21 +405,21 @@
 
 ;; ── Kanban Board Components ──────────────────────────────────
 
-(defn- board-card [_todo]
+(defn- board-card [_item]
   (let [editing? (r/atom false)]
-    (fn [todo]
-      (let [{:keys [id title status category due-date]} todo
+    (fn [item]
+      (let [{:keys [id title status category due-date]} item
             cc (category-config category)
-            dragging? (= id @drag-todo-id)]
+            dragging? (= id @drag-item-id)]
         [:div {:class (str "bg-white rounded-md border border-gray-200 px-3 py-2 mb-1.5 cursor-grab group shadow-sm hover:shadow-md transition-shadow "
                            (when dragging? "opacity-30"))
                :draggable true
                :on-drag-start (fn [e]
-                                (reset! drag-todo-id id)
+                                (reset! drag-item-id id)
                                 (.setData (.-dataTransfer e) "text/plain" id)
                                 (set! (.-effectAllowed (.-dataTransfer e)) "move"))
                :on-drag-end (fn [_]
-                              (reset! drag-todo-id nil)
+                              (reset! drag-item-id nil)
                               (reset! drop-target nil))}
          ;; Title
          [:div {:class "min-w-0 mb-1"}
@@ -413,13 +429,13 @@
                      :on-blur (fn [e]
                                 (let [v (.. e -target -value)]
                                   (when (and (seq v) (not= v title))
-                                    (update-todo-item! id {:title v})))
+                                    (update-item! id {:title v})))
                                 (reset! editing? false))
                      :on-key-down (fn [e]
                                     (when (= (.-key e) "Enter")
                                       (let [v (.. e -target -value)]
                                         (when (and (seq v) (not= v title))
-                                          (update-todo-item! id {:title v})))
+                                          (update-item! id {:title v})))
                                       (reset! editing? false))
                                     (when (= (.-key e) "Escape")
                                       (reset! editing? false)))
@@ -438,11 +454,11 @@
           [:div {:class "flex-1"}]
           [:button {:on-click (fn [e]
                                 (.stopPropagation e)
-                                (delete-todo-item! id))
+                                (delete-item! id))
                     :class "text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs"}
            "\u2715"]]]))))
 
-(defn- status-column [status items]
+(defn- status-column [status col-items]
   (let [sc (status-config status)
         is-over? (and @drop-target (= status (:status @drop-target)))]
     [:div {:class (str "flex flex-col bg-gray-100 rounded-lg min-w-0 flex-1 "
@@ -451,36 +467,35 @@
            :on-drag-over (fn [e]
                            (.preventDefault e)
                            (set! (.-dropEffect (.-dataTransfer e)) "move")
-                           (when @drag-todo-id
-                             (reset! drop-target {:status status :index (count items)})))
+                           (when @drag-item-id
+                             (reset! drop-target {:status status :index (count col-items)})))
            :on-drag-leave (fn [e]
-                            ;; Only clear if actually leaving this column
                             (when-not (.contains (.-currentTarget e) (.-relatedTarget e))
                               (when (= status (:status @drop-target))
                                 (reset! drop-target nil))))
            :on-drop (fn [e]
                       (.preventDefault e)
-                      (let [todo-id (.getData (.-dataTransfer e) "text/plain")
-                            target-idx (or (:index @drop-target) (count items))]
-                        (when (seq todo-id)
-                          (move-todo-to-status! todo-id status target-idx)))
+                      (let [item-id (.getData (.-dataTransfer e) "text/plain")
+                            target-idx (or (:index @drop-target) (count col-items))]
+                        (when (seq item-id)
+                          (move-item-to-status! item-id status target-idx)))
                       (reset! drop-target nil)
-                      (reset! drag-todo-id nil))}
+                      (reset! drag-item-id nil))}
      ;; Column header
      [:div {:class "flex items-center gap-1.5 px-3 py-2 flex-shrink-0"}
       [:div {:class (str "w-2 h-2 rounded-full " (:dot sc))}]
       [:span {:class "text-xs font-semibold text-gray-700"} (:label sc)]
-      [:span {:class "text-[10px] text-gray-400 ml-auto"} (count items)]]
+      [:span {:class "text-[10px] text-gray-400 ml-auto"} (count col-items)]]
      ;; Cards
      [:div {:class "flex-1 overflow-y-auto px-2 pb-2 space-y-0"}
-      (if (seq items)
+      (if (seq col-items)
         (doall
           (map-indexed
-            (fn [idx todo]
+            (fn [idx item]
               (let [show-indicator? (and is-over?
                                          @drop-target
                                          (= idx (:index @drop-target)))]
-                ^{:key (:id todo)}
+                ^{:key (:id item)}
                 [:div {:on-drag-over (fn [e]
                                        (.preventDefault e)
                                        (.stopPropagation e)
@@ -490,43 +505,43 @@
                                          (reset! drop-target {:status status :index insert-idx})))}
                  (when show-indicator?
                    [:div {:class "h-0.5 bg-indigo-500 rounded-full mx-1 mb-1"}])
-                 [board-card todo]]))
-            items))
+                 [board-card item]]))
+            col-items))
         ;; Empty column drop area
         [:div {:class (str "flex items-center justify-center h-16 border-2 border-dashed rounded-md text-[10px] text-gray-400 mx-1 "
                            (if is-over? "border-indigo-300 bg-indigo-50" "border-gray-300"))}
          "Drop here"])
       ;; Show indicator at end if dropping after last item
-      (when (and is-over? (= (count items) (:index @drop-target)))
+      (when (and is-over? (= (count col-items) (:index @drop-target)))
         [:div {:class "h-0.5 bg-indigo-500 rounded-full mx-1 mt-0.5"}])]]))
 
-(defn- new-todo-input []
+(defn- new-item-input []
   [:div {:class "flex gap-2 px-4 py-3 bg-white border-b border-gray-200"}
    [:input {:type "text"
-            :placeholder "Add a new TODO..."
-            :value @new-todo-title
-            :on-change #(reset! new-todo-title (.. % -target -value))
+            :placeholder "Add a new item..."
+            :value @new-item-title
+            :on-change #(reset! new-item-title (.. % -target -value))
             :on-key-down (fn [e]
-                           (when (and (= (.-key e) "Enter") (seq @new-todo-title))
-                             (create-todo-item! @new-todo-title)
-                             (reset! new-todo-title "")))
+                           (when (and (= (.-key e) "Enter") (seq @new-item-title))
+                             (create-item! @new-item-title)
+                             (reset! new-item-title "")))
             :class "flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"}]
    [:button {:on-click (fn []
-                         (when (seq @new-todo-title)
-                           (create-todo-item! @new-todo-title)
-                           (reset! new-todo-title "")))
+                         (when (seq @new-item-title)
+                           (create-item! @new-item-title)
+                           (reset! new-item-title "")))
              :class "px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"}
     "Add"]])
 
-(defn- todo-view []
+(defn- list-view []
   (if-not @current-list-id
     [:div {:class "h-full flex items-center justify-center bg-gray-50"}
      [:div {:class "text-center text-gray-400"}
       [:p {:class "text-lg mb-2"} "No list selected"]
       [:p {:class "text-sm"} "Create a list from the menu to get started"]]]
-    (let [grouped (group-by :status @todos)]
+    (let [grouped (group-by :status @items)]
       [:div {:class "h-full flex flex-col bg-gray-50"}
-       [new-todo-input]
+       [new-item-input]
        [:div {:class "flex-1 overflow-x-auto overflow-y-hidden p-4"}
         [:div {:class "flex gap-3 h-full"}
          (for [s status-order]
@@ -594,7 +609,7 @@
             :on-key-down (fn [e]
                            (when (and (= (.-key e) "Enter")
                                       (seq (.-value (.-target e))))
-                             (create-todo-list! @new-list-name)
+                             (create-list! @new-list-name)
                              (reset! new-list-name "")
                              (reset! creating-list? false))
                            (when (= (.-key e) "Escape")
@@ -604,7 +619,7 @@
    [:div {:class "flex gap-1 mt-1"}
     [:button {:on-click (fn []
                           (when (seq @new-list-name)
-                            (create-todo-list! @new-list-name)
+                            (create-list! @new-list-name)
                             (reset! new-list-name "")
                             (reset! creating-list? false)))
               :class "flex-1 px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"}
@@ -615,23 +630,21 @@
               :class "flex-1 px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"}
      "Cancel"]]])
 
-(defn- list-list-item [tl]
-  (let [selected? (= (:id tl) @current-list-id)]
+(defn- list-list-item [l]
+  (let [selected? (= (:id l) @current-list-id)]
     [:div {:class (str "flex items-center justify-between px-3 py-2 cursor-pointer rounded-md text-sm "
                        (if selected?
                          "bg-indigo-50 text-indigo-700 font-medium"
                          "text-gray-700 hover:bg-gray-100"))
-           :on-click (fn []
-                       (switch-list! (:id tl))
-                       (reset! current-view :todos))}
+           :on-click #(switch-list! (:id l))}
      [:div {:class "flex items-center gap-2 min-w-0"}
       (when selected?
         [:div {:class "w-1.5 h-1.5 rounded-full bg-indigo-600 flex-shrink-0"}])
-      [:span {:class "truncate"} (:name tl)]]
+      [:span {:class "truncate"} (:name l)]]
      [:button {:on-click (fn [e]
                            (.stopPropagation e)
-                           (when (js/confirm (str "Delete \"" (:name tl) "\"?"))
-                             (delete-todo-list! (:id tl))))
+                           (when (js/confirm (str "Delete \"" (:name l) "\"?"))
+                             (delete-list! (:id l))))
                :class "text-gray-400 hover:text-red-500 flex-shrink-0 ml-1"}
       "\u2715"]]))
 
@@ -646,28 +659,6 @@
       [:button {:class "text-gray-400 hover:text-gray-600"
                 :on-click #(reset! panel-open? false)}
        "\u2715"]]
-     ;; Views section
-     [:div {:class "px-4 pt-3 pb-2"}
-      [:span {:class "text-xs font-semibold text-gray-500 uppercase tracking-wide"} "Views"]
-      [:div {:class "mt-1 space-y-0.5"}
-       [:button {:on-click (fn []
-                             (reset! current-view :graph)
-                             (reset! panel-open? false))
-                 :class (str "w-full text-left px-3 py-2 rounded-md text-sm "
-                             (if (= @current-view :graph)
-                               "bg-indigo-50 text-indigo-700 font-medium"
-                               "text-gray-700 hover:bg-gray-100"))}
-        "Graph"]
-       [:button {:on-click (fn []
-                             (reset! current-view :todos)
-                             (when @current-list-id
-                               (fetch-todos!))
-                             (reset! panel-open? false))
-                 :class (str "w-full text-left px-3 py-2 rounded-md text-sm "
-                             (if (= @current-view :todos)
-                               "bg-indigo-50 text-indigo-700 font-medium"
-                               "text-gray-700 hover:bg-gray-100"))}
-        "TODOs"]]]
      ;; Graphs & Lists sections
      [:div {:class "flex-1 overflow-y-auto"}
       ;; Graphs section
@@ -686,7 +677,7 @@
          (when-not @creating-graph?
            [:div {:class "px-2 py-4 text-xs text-gray-400 text-center"}
             "No graphs yet"]))]
-      ;; TODO Lists section
+      ;; Lists section
       [:div {:class "px-4 pt-3 pb-2 flex items-center justify-between border-t border-gray-200"}
        [:span {:class "text-xs font-semibold text-gray-500 uppercase tracking-wide"} "Lists"]
        [:button {:on-click #(reset! creating-list? true)
@@ -695,10 +686,10 @@
       (when @creating-list?
         [new-list-form])
       [:div {:class "px-2 pb-2 space-y-0.5"}
-       (if (seq @todo-lists)
-         (for [tl @todo-lists]
-           ^{:key (:id tl)}
-           [list-list-item tl])
+       (if (seq @lists)
+         (for [l @lists]
+           ^{:key (:id l)}
+           [list-list-item l])
          (when-not @creating-list?
            [:div {:class "px-2 py-4 text-xs text-gray-400 text-center"}
             "No lists yet"]))]]
@@ -759,9 +750,8 @@
      [:div {:class "absolute top-0 left-0 h-full z-50"}
       [sidebar]])
    (case @current-view
-     :todos
+     :list
      [:div {:class "h-full flex flex-col"}
-      ;; Top bar for TODO view
       [:div {:class "flex items-center gap-2 p-2 bg-white border-b border-gray-200"}
        (when-not @panel-open?
          [:button
@@ -770,7 +760,7 @@
            :style {:font-size "18px" :line-height "1"}}
           "\u2630"])]
       [:div {:class "flex-1 overflow-hidden"}
-       [todo-view]]]
+       [list-view]]]
      ;; default: graph view
      [graph-view])])
 
@@ -778,10 +768,55 @@
 
 (defonce root (atom nil))
 
+(defn- apply-route! [{:keys [view id]}]
+  (case view
+    :list (do (reset! current-view :list)
+              (when id
+                (reset! current-list-id id)
+                (fetch-items!)))
+    ;; :graph (default)
+    (do (reset! current-view :graph)
+        (when id
+          (load-graph! id)))))
+
+(defn- init-routing! []
+  (let [route (parse-path)]
+    (.addEventListener js/window "popstate"
+      (fn [_] (apply-route! (parse-path))))
+    (-> (js/fetch "/api/graphs"
+                  #js {:method "GET" :headers (clj->js (api-headers))})
+        (.then (fn [res] (.json res)))
+        (.then (fn [data]
+                 (let [d (js->clj data :keywordize-keys true)]
+                   (reset! graphs (:graphs d))
+                   (when (= :graph (:view route))
+                     (let [gid (or (:id route) (:id (first (:graphs d))))]
+                       (when gid
+                         (load-graph! gid)
+                         (when-not (:id route)
+                           (push-url! (str "/graphs/" gid)))))))))
+        (.catch (fn [err] (js/console.error "Fetch graphs failed:" err))))
+    (-> (js/fetch "/api/lists"
+                  #js {:method "GET" :headers (clj->js (api-headers))})
+        (.then (fn [res] (.json res)))
+        (.then (fn [data]
+                 (let [d (js->clj data :keywordize-keys true)]
+                   (reset! lists (:lists d))
+                   (when (= :list (:view route))
+                     (let [lid (or (:id route) (:id (first (:lists d))))]
+                       (when lid
+                         (reset! current-view :list)
+                         (reset! current-list-id lid)
+                         (fetch-items!)
+                         (when-not (:id route)
+                           (push-url! (str "/lists/" lid))))))
+                   (when (and (nil? @current-list-id) (seq (:lists d)))
+                     (reset! current-list-id (:id (first (:lists d))))))))
+        (.catch (fn [err] (js/console.error "Fetch lists failed:" err))))))
+
 (defn ^:after-load init []
   (when-let [el (.getElementById js/document "react-flow-root")]
     (when-not @root
       (reset! root (rdc/create-root el)))
     (rdc/render @root [app])
-    (fetch-graphs!)
-    (fetch-todo-lists!)))
+    (init-routing!)))

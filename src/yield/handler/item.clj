@@ -1,8 +1,8 @@
-(ns yield.handler.todo
+(ns yield.handler.item
   (:require [integrant.core :as ig]
             [ring.util.response :as response]
             [clojure.data.json :as json]
-            [yield.boundary.todo :as todo-db]))
+            [yield.boundary.item :as item-db]))
 
 (defn- json-response [body]
   (-> (response/response (json/write-str body))
@@ -14,8 +14,8 @@
 (defn- require-auth [request]
   (get-in request [:session :user-id]))
 
-(defn- format-todo [todo]
-  (-> todo
+(defn- format-item [item]
+  (-> item
       (update :id str)
       (update :created-at str)
       (update :updated-at str)
@@ -23,17 +23,17 @@
 
 ;; ── Handlers ────────────────────────────────────────────────────
 
-(defn list-todos [db request]
+(defn list-items [db request]
   (if-let [user-id (require-auth request)]
     (let [params (:query-params request)
           opts {:status   (get params "status")
                 :category (get params "category")
                 :list-id  (get params "list_id")}]
-      (json-response {:todos (mapv format-todo (todo-db/list-todos db user-id opts))}))
+      (json-response {:items (mapv format-item (item-db/list-items db user-id opts))}))
     (-> (json-response {:error "Unauthorized"})
         (response/status 401))))
 
-(defn create-todo [db request]
+(defn create-item [db request]
   (if-let [user-id (require-auth request)]
     (let [{:keys [title description status category due_date list_id]} (parse-body request)]
       (if (or (nil? title) (empty? title))
@@ -42,23 +42,23 @@
         (if (nil? list_id)
           (-> (json-response {:error "list_id is required"})
               (response/status 400))
-          (let [todo (todo-db/create-todo! db user-id
+          (let [item (item-db/create-item! db user-id
                        {:title       title
                         :description description
                         :status      status
                         :category    category
                         :due-date    due_date
                         :list-id     list_id})]
-            (-> (json-response {:todo (format-todo todo)})
+            (-> (json-response {:item (format-item item)})
                 (response/status 201))))))
     (-> (json-response {:error "Unauthorized"})
         (response/status 401))))
 
-(defn update-todo [db request]
+(defn update-item [db request]
   (if-let [user-id (require-auth request)]
-    (let [todo-id (get-in request [:path-params :id])
-          todo (todo-db/find-todo db todo-id user-id)]
-      (if todo
+    (let [item-id (get-in request [:path-params :id])
+          item (item-db/find-item db item-id user-id)]
+      (if item
         (let [body (parse-body request)
               {:keys [title description status category due_date]} body
               changes (cond-> {}
@@ -67,49 +67,49 @@
                         status      (assoc :status status)
                         category    (assoc :category category)
                         (contains? body :due_date) (assoc :due-date due_date))
-              updated (todo-db/update-todo! db todo-id changes)]
-          (json-response {:todo (format-todo (or updated todo))}))
+              updated (item-db/update-item! db item-id changes)]
+          (json-response {:item (format-item (or updated item))}))
         (-> (json-response {:error "Not found"})
             (response/status 404))))
     (-> (json-response {:error "Unauthorized"})
         (response/status 401))))
 
-(defn delete-todo [db request]
+(defn delete-item [db request]
   (if-let [user-id (require-auth request)]
-    (let [todo-id (get-in request [:path-params :id])
-          todo (todo-db/find-todo db todo-id user-id)]
-      (if todo
-        (do (todo-db/delete-todo! db todo-id)
+    (let [item-id (get-in request [:path-params :id])
+          item (item-db/find-item db item-id user-id)]
+      (if item
+        (do (item-db/delete-item! db item-id)
             (json-response {:ok true}))
         (-> (json-response {:error "Not found"})
             (response/status 404))))
     (-> (json-response {:error "Unauthorized"})
         (response/status 401))))
 
-(defn reorder-todos [db request]
+(defn reorder-items [db request]
   (if-let [user-id (require-auth request)]
-    (let [{:keys [todo_ids]} (parse-body request)]
-      (if (seq todo_ids)
-        (do (todo-db/reorder-todos! db user-id todo_ids)
+    (let [{:keys [item_ids]} (parse-body request)]
+      (if (seq item_ids)
+        (do (item-db/reorder-items! db user-id item_ids)
             (json-response {:ok true}))
-        (-> (json-response {:error "todo_ids is required"})
+        (-> (json-response {:error "item_ids is required"})
             (response/status 400))))
     (-> (json-response {:error "Unauthorized"})
         (response/status 401))))
 
 ;; ── Integrant Keys ──────────────────────────────────────────────
 
-(defmethod ig/init-key :yield.handler.todo/list [_ {:keys [db]}]
-  (fn [request] (list-todos db request)))
+(defmethod ig/init-key :yield.handler.item/list [_ {:keys [db]}]
+  (fn [request] (list-items db request)))
 
-(defmethod ig/init-key :yield.handler.todo/create [_ {:keys [db]}]
-  (fn [request] (create-todo db request)))
+(defmethod ig/init-key :yield.handler.item/create [_ {:keys [db]}]
+  (fn [request] (create-item db request)))
 
-(defmethod ig/init-key :yield.handler.todo/update [_ {:keys [db]}]
-  (fn [request] (update-todo db request)))
+(defmethod ig/init-key :yield.handler.item/update [_ {:keys [db]}]
+  (fn [request] (update-item db request)))
 
-(defmethod ig/init-key :yield.handler.todo/delete [_ {:keys [db]}]
-  (fn [request] (delete-todo db request)))
+(defmethod ig/init-key :yield.handler.item/delete [_ {:keys [db]}]
+  (fn [request] (delete-item db request)))
 
-(defmethod ig/init-key :yield.handler.todo/reorder [_ {:keys [db]}]
-  (fn [request] (reorder-todos db request)))
+(defmethod ig/init-key :yield.handler.item/reorder [_ {:keys [db]}]
+  (fn [request] (reorder-items db request)))

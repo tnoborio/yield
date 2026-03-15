@@ -30,7 +30,12 @@
             "INSERT INTO todo_lists (user_id, name) SELECT DISTINCT user_id, 'Default' FROM todos WHERE NOT EXISTS (SELECT 1 FROM todo_lists tl WHERE tl.user_id = todos.user_id)"
             "UPDATE todos SET list_id = (SELECT tl.id FROM todo_lists tl WHERE tl.user_id = todos.user_id LIMIT 1) WHERE list_id IS NULL"
             "ALTER TABLE todos ALTER COLUMN list_id SET NOT NULL"]
-     :down ["ALTER TABLE todos DROP COLUMN list_id"]}]}
+     :down ["ALTER TABLE todos DROP COLUMN list_id"]}
+    {:id   "009-rename-todo-tables"
+     :up   ["ALTER TABLE todos RENAME TO items"
+            "ALTER TABLE todo_lists RENAME TO lists"]
+     :down ["ALTER TABLE items RENAME TO todos"
+            "ALTER TABLE lists RENAME TO todo_lists"]}]}
 
   :duct.module/cljs
   {:builds {:app {:entries [yield.app]
@@ -40,6 +45,8 @@
   {:port 5001
    :features #{:site :hiccup}
    :routes [["/" {:get :yield.handler/index}]
+            ["/graphs/:id" {:get :yield.handler/index}]
+            ["/lists/:id" {:get :yield.handler/index}]
             ["/greeting" {:get :yield.handler/greeting}]
             ["/login" {:get  :yield.handler.auth/login-page
                        :post :yield.handler.auth/login-submit}]
@@ -55,14 +62,14 @@
             ["/api/graphs/:id" {:get    :yield.handler.graph/get-data
                                 :delete :yield.handler.graph/delete}]
             ["/api/graphs/:id/save" {:put :yield.handler.graph/save-data}]
-            ["/api/todo-lists"     {:get  :yield.handler.todo-list/list
-                                    :post :yield.handler.todo-list/create}]
-            ["/api/todo-lists/:id" {:delete :yield.handler.todo-list/delete}]
-            ["/api/todos"          {:get  :yield.handler.todo/list
-                                    :post :yield.handler.todo/create}]
-            ["/api/todo-reorder"   {:put :yield.handler.todo/reorder}]
-            ["/api/todos/:id"      {:put    :yield.handler.todo/update
-                                    :delete :yield.handler.todo/delete}]]}
+            ["/api/lists"          {:get  :yield.handler.list/list
+                                    :post :yield.handler.list/create}]
+            ["/api/lists/:id"      {:delete :yield.handler.list/delete}]
+            ["/api/items"          {:get  :yield.handler.item/list
+                                    :post :yield.handler.item/create}]
+            ["/api/item-reorder"   {:put :yield.handler.item/reorder}]
+            ["/api/items/:id"      {:put    :yield.handler.item/update
+                                    :delete :yield.handler.item/delete}]]}
 
   :yield.handler.auth/login-submit
   {:db #ig/ref :duct.database/sql}
@@ -91,26 +98,26 @@
   :yield.handler.graph/save-data
   {:db #ig/ref :duct.database/sql}
 
-  :yield.handler.todo-list/list
+  :yield.handler.list/list
   {:db #ig/ref :duct.database/sql}
 
-  :yield.handler.todo-list/create
+  :yield.handler.list/create
   {:db #ig/ref :duct.database/sql}
 
-  :yield.handler.todo-list/delete
+  :yield.handler.list/delete
   {:db #ig/ref :duct.database/sql}
 
-  :yield.handler.todo/list
+  :yield.handler.item/list
   {:db #ig/ref :duct.database/sql}
 
-  :yield.handler.todo/create
+  :yield.handler.item/create
   {:db #ig/ref :duct.database/sql}
 
-  :yield.handler.todo/update
+  :yield.handler.item/update
   {:db #ig/ref :duct.database/sql}
 
-  :yield.handler.todo/delete
+  :yield.handler.item/delete
   {:db #ig/ref :duct.database/sql}
 
-  :yield.handler.todo/reorder
+  :yield.handler.item/reorder
   {:db #ig/ref :duct.database/sql}}}

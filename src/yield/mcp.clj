@@ -5,8 +5,8 @@
             [org.clojars.roklenarcic.mcp-server.handler.init :as h.init]
             [next.jdbc :as jdbc]
             [yield.boundary.graph :as graph-db]
-            [yield.boundary.todo :as todo-db]
-            [yield.boundary.todo-list :as list-db]
+            [yield.boundary.item :as item-db]
+            [yield.boundary.list :as list-db]
             [yield.boundary.user :as user-db]
             [clojure.data.json :as json]
             [clojure.string :as str])
@@ -27,20 +27,20 @@
 (defn- normalize-node [node]
   (merge {:type "editable" :label ""} (underscore->kebab node)))
 
-(defn- format-graph [graph]
-  (update-vals graph str))
+(defn- format-record [record]
+  (update-vals record str))
 
-;; ── Tool Handlers ──────────────────────────────────────────────
+;; ── Graph Tool Handlers ──────────────────────────────────────
 
 (defn- handle-list-graphs [db _exchange _args]
   (let [graphs (graph-db/list-all-graphs db)]
-    (json/write-str {:graphs (mapv format-graph graphs)})))
+    (json/write-str {:graphs (mapv format-record graphs)})))
 
 (defn- handle-get-graph [db _exchange {:keys [graph_id]}]
   (if-let [graph (graph-db/find-graph-by-id db graph_id)]
     (let [nodes (graph-db/get-nodes db graph_id)
           edges (graph-db/get-edges db graph_id)]
-      (json/write-str {:graph  (format-graph graph)
+      (json/write-str {:graph  (format-record graph)
                        :nodes  nodes
                        :edges  edges}))
     (core/tool-error (str "Graph not found: " graph_id))))
@@ -48,7 +48,7 @@
 (defn- handle-create-graph [db _exchange {:keys [user_email name]}]
   (if-let [user (user-db/find-user-by-email db user_email)]
     (let [graph (graph-db/create-graph! db (str (:id user)) name)]
-      (json/write-str {:graph (format-graph graph)}))
+      (json/write-str {:graph (format-record graph)}))
     (core/tool-error (str "User not found: " user_email))))
 
 (defn- handle-save-graph [db _exchange {:keys [graph_id nodes edges]}]
@@ -66,78 +66,78 @@
       (json/write-str {:ok true :deleted graph_id}))
     (core/tool-error (str "Graph not found: " graph_id))))
 
-;; ── TODO List Tool Handlers ──────────────────────────────────
+;; ── List Tool Handlers ──────────────────────────────────────
 
-(defn- handle-list-todo-lists [db _exchange {:keys [user_email]}]
+(defn- handle-list-lists [db _exchange {:keys [user_email]}]
   (if user_email
     (if-let [user (user-db/find-user-by-email db user_email)]
-      (let [lists (list-db/list-todo-lists db (str (:id user)))]
-        (json/write-str {:todo_lists (mapv format-graph lists)}))
+      (let [lists (list-db/list-lists db (str (:id user)))]
+        (json/write-str {:lists (mapv format-record lists)}))
       (core/tool-error (str "User not found: " user_email)))
-    (let [lists (list-db/list-all-todo-lists db)]
-      (json/write-str {:todo_lists (mapv format-graph lists)}))))
+    (let [lists (list-db/list-all-lists db)]
+      (json/write-str {:lists (mapv format-record lists)}))))
 
-(defn- handle-create-todo-list [db _exchange {:keys [user_email name]}]
+(defn- handle-create-list [db _exchange {:keys [user_email name]}]
   (if-let [user (user-db/find-user-by-email db user_email)]
-    (let [tl (list-db/create-todo-list! db (str (:id user)) name)]
-      (json/write-str {:todo_list (format-graph tl)}))
+    (let [l (list-db/create-list! db (str (:id user)) name)]
+      (json/write-str {:list (format-record l)}))
     (core/tool-error (str "User not found: " user_email))))
 
-(defn- handle-delete-todo-list [db _exchange {:keys [list_id]}]
-  (if-let [_tl (list-db/find-todo-list-by-id db list_id)]
+(defn- handle-delete-list [db _exchange {:keys [list_id]}]
+  (if-let [_l (list-db/find-list-by-id db list_id)]
     (do
-      (list-db/delete-todo-list! db list_id)
+      (list-db/delete-list! db list_id)
       (json/write-str {:ok true :deleted list_id}))
-    (core/tool-error (str "Todo list not found: " list_id))))
+    (core/tool-error (str "List not found: " list_id))))
 
-;; ── TODO Tool Handlers ───────────────────────────────────────
+;; ── Item Tool Handlers ───────────────────────────────────────
 
-(defn- format-todo [todo]
-  (update-vals todo str))
+(defn- format-item [item]
+  (update-vals item str))
 
-(defn- handle-list-todos [db _exchange {:keys [user_email list_id]}]
+(defn- handle-list-items [db _exchange {:keys [user_email list_id]}]
   (if user_email
     (if-let [user (user-db/find-user-by-email db user_email)]
       (let [opts (cond-> {}
                    list_id (assoc :list-id list_id))
-            todos (todo-db/list-todos db (str (:id user)) opts)]
-        (json/write-str {:todos (mapv format-todo todos)}))
+            items (item-db/list-items db (str (:id user)) opts)]
+        (json/write-str {:items (mapv format-item items)}))
       (core/tool-error (str "User not found: " user_email)))
-    (let [todos (todo-db/list-all-todos db)]
-      (json/write-str {:todos (mapv format-todo todos)}))))
+    (let [items (item-db/list-all-items db)]
+      (json/write-str {:items (mapv format-item items)}))))
 
-(defn- handle-create-todo [db _exchange {:keys [user_email list_id title description status category due_date]}]
+(defn- handle-create-item [db _exchange {:keys [user_email list_id title description status category due_date]}]
   (if-let [user (user-db/find-user-by-email db user_email)]
     (if (nil? list_id)
       (core/tool-error "list_id is required")
-      (let [todo (todo-db/create-todo! db (str (:id user))
+      (let [item (item-db/create-item! db (str (:id user))
                   {:title       title
                    :description description
                    :status      status
                    :category    category
                    :due-date    due_date
                    :list-id     list_id})]
-        (json/write-str {:todo (format-todo todo)})))
+        (json/write-str {:item (format-item item)})))
     (core/tool-error (str "User not found: " user_email))))
 
-(defn- handle-update-todo [db _exchange {:keys [todo_id title description status category due_date]}]
-  (if-let [_todo (todo-db/find-todo-by-id db todo_id)]
+(defn- handle-update-item [db _exchange {:keys [item_id title description status category due_date]}]
+  (if-let [_item (item-db/find-item-by-id db item_id)]
     (let [changes (cond-> {}
                     title       (assoc :title title)
                     description (assoc :description description)
                     status      (assoc :status status)
                     category    (assoc :category category)
                     due_date    (assoc :due-date due_date))
-          updated (todo-db/update-todo! db todo_id changes)]
-      (json/write-str {:todo (format-todo (or updated _todo))}))
-    (core/tool-error (str "Todo not found: " todo_id))))
+          updated (item-db/update-item! db item_id changes)]
+      (json/write-str {:item (format-item (or updated _item))}))
+    (core/tool-error (str "Item not found: " item_id))))
 
-(defn- handle-delete-todo [db _exchange {:keys [todo_id]}]
-  (if-let [_todo (todo-db/find-todo-by-id db todo_id)]
+(defn- handle-delete-item [db _exchange {:keys [item_id]}]
+  (if-let [_item (item-db/find-item-by-id db item_id)]
     (do
-      (todo-db/delete-todo! db todo_id)
-      (json/write-str {:ok true :deleted todo_id}))
-    (core/tool-error (str "Todo not found: " todo_id))))
+      (item-db/delete-item! db item_id)
+      (json/write-str {:ok true :deleted item_id}))
+    (core/tool-error (str "Item not found: " item_id))))
 
 ;; ── Tool Definitions ───────────────────────────────────────────
 
@@ -197,76 +197,76 @@
       ["graph_id"])
     (partial handle-delete-graph db))
 
-   ;; TODO list tools
+   ;; List tools
    (server/tool
-    "list_todo_lists"
-    "List all TODO lists. Optionally filter by user email."
+    "list_lists"
+    "List all lists. Optionally filter by user email."
     (server/obj-schema nil
       {:user_email (server/str-schema "Email of the user (optional, lists all if omitted)" nil)}
       [])
-    (partial handle-list-todo-lists db))
+    (partial handle-list-lists db))
 
    (server/tool
-    "create_todo_list"
-    "Create a new TODO list for a user"
+    "create_list"
+    "Create a new list for a user"
     (server/obj-schema nil
       {:user_email (server/str-schema "Email of the user" nil)
-       :name       (server/str-schema "Name of the TODO list" nil)}
+       :name       (server/str-schema "Name of the list" nil)}
       ["user_email" "name"])
-    (partial handle-create-todo-list db))
+    (partial handle-create-list db))
 
    (server/tool
-    "delete_todo_list"
-    "Delete a TODO list and all its TODOs"
+    "delete_list"
+    "Delete a list and all its items"
     (server/obj-schema nil
-      {:list_id (server/str-schema "UUID of the TODO list to delete" nil)}
+      {:list_id (server/str-schema "UUID of the list to delete" nil)}
       ["list_id"])
-    (partial handle-delete-todo-list db))
+    (partial handle-delete-list db))
 
-   ;; TODO tools
+   ;; Item tools
    (server/tool
-    "list_todos"
-    "List all TODOs. Optionally filter by user email and/or list ID."
+    "list_items"
+    "List all items. Optionally filter by user email and/or list ID."
     (server/obj-schema nil
       {:user_email (server/str-schema "Email of the user (optional, lists all if omitted)" nil)
-       :list_id    (server/str-schema "UUID of the TODO list to filter by (optional)" nil)}
+       :list_id    (server/str-schema "UUID of the list to filter by (optional)" nil)}
       [])
-    (partial handle-list-todos db))
+    (partial handle-list-items db))
 
    (server/tool
-    "create_todo"
-    "Create a new TODO for a user in a specific list"
+    "create_item"
+    "Create a new item in a specific list"
     (server/obj-schema nil
       {:user_email  (server/str-schema "Email of the user" nil)
-       :list_id     (server/str-schema "UUID of the TODO list to add the TODO to" nil)
-       :title       (server/str-schema "Title of the TODO" nil)
+       :list_id     (server/str-schema "UUID of the list to add the item to" nil)
+       :title       (server/str-schema "Title of the item" nil)
        :description (server/str-schema "Description (optional)" nil)
        :status      (server/str-schema "Status: done, ready, in_progress, wait, reject, arts (default: ready)" nil)
        :category    (server/str-schema "Category: private, keystone, sasara, contract, toeic (default: private)" nil)
        :due_date    (server/str-schema "Due date in YYYY-MM-DD format (optional)" nil)}
       ["user_email" "list_id" "title"])
-    (partial handle-create-todo db))
+    (partial handle-create-item db))
 
    (server/tool
-    "update_todo"
-    "Update an existing TODO. Only provided fields are updated."
+    "update_item"
+    "Update an existing item. Only provided fields are updated."
     (server/obj-schema nil
-      {:todo_id     (server/str-schema "UUID of the TODO to update" nil)
+      {:item_id     (server/str-schema "UUID of the item to update" nil)
        :title       (server/str-schema "New title (optional)" nil)
        :description (server/str-schema "New description (optional)" nil)
        :status      (server/str-schema "New status: done, ready, in_progress, wait, reject, arts (optional)" nil)
        :category    (server/str-schema "New category: private, keystone, sasara, contract, toeic (optional)" nil)
        :due_date    (server/str-schema "New due date in YYYY-MM-DD format (optional)" nil)}
-      ["todo_id"])
-    (partial handle-update-todo db))
+      ["item_id"])
+    (partial handle-update-item db))
 
    (server/tool
-    "delete_todo"
-    "Delete a TODO"
+    "delete_item"
+    "Delete an item"
     (server/obj-schema nil
-      {:todo_id (server/str-schema "UUID of the TODO to delete" nil)}
-      ["todo_id"])
-    (partial handle-delete-todo db))])
+      {:item_id (server/str-schema "UUID of the item to delete" nil)}
+      ["item_id"])
+    (partial handle-delete-item db))])
 
 ;; ── Main ───────────────────────────────────────────────────────
 
@@ -274,8 +274,8 @@
   (let [db      (make-datasource)
         serde   (mcp-json/serde {})
         info    (server/server-info
-                 "Yield" "1.1.0"
-                 "MCP server for Yield. Manage graphs (nodes/edges) and TODOs (tasks with status, category, due dates).")
+                 "Yield" "1.2.0"
+                 "MCP server for Yield. Manage graphs (nodes/edges) and lists with items (tasks with status, category, due dates).")
         session (reduce server/add-tool
                         (server/make-session info serde {})
                         (make-tools db))]
