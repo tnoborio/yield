@@ -35,7 +35,10 @@
      :up   ["ALTER TABLE todos RENAME TO items"
             "ALTER TABLE todo_lists RENAME TO lists"]
      :down ["ALTER TABLE items RENAME TO todos"
-            "ALTER TABLE lists RENAME TO todo_lists"]}]}
+            "ALTER TABLE lists RENAME TO todo_lists"]}
+    {:id   "010-add-settings-to-lists"
+     :up   ["ALTER TABLE lists ADD COLUMN settings JSONB NOT NULL DEFAULT '{\"statuses\":[{\"key\":\"ready\",\"label\":\"Ready\",\"color\":\"blue\"},{\"key\":\"in_progress\",\"label\":\"In Progress\",\"color\":\"amber\"},{\"key\":\"wait\",\"label\":\"Wait\",\"color\":\"gray\"},{\"key\":\"arts\",\"label\":\"Arts\",\"color\":\"purple\"},{\"key\":\"done\",\"label\":\"Done\",\"color\":\"green\"},{\"key\":\"reject\",\"label\":\"Reject\",\"color\":\"red\"}],\"tags\":[]}'::jsonb"]
+     :down ["ALTER TABLE lists DROP COLUMN settings"]}]}
 
   :duct.module/cljs
   {:builds {:app {:entries [yield.app]
@@ -65,6 +68,7 @@
             ["/api/lists"          {:get  :yield.handler.list/list
                                     :post :yield.handler.list/create}]
             ["/api/lists/:id"      {:delete :yield.handler.list/delete}]
+            ["/api/lists/:id/settings" {:put :yield.handler.list/update-settings}]
             ["/api/items"          {:get  :yield.handler.item/list
                                     :post :yield.handler.item/create}]
             ["/api/item-reorder"   {:put :yield.handler.item/reorder}]
@@ -105,6 +109,9 @@
   {:db #ig/ref :duct.database/sql}
 
   :yield.handler.list/delete
+  {:db #ig/ref :duct.database/sql}
+
+  :yield.handler.list/update-settings
   {:db #ig/ref :duct.database/sql}
 
   :yield.handler.item/list

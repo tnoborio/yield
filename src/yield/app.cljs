@@ -32,6 +32,10 @@
 (defonce creating-list? (r/atom false))
 (defonce new-list-name (r/atom ""))
 
+;; Settings state
+(defonce list-settings-open? (r/atom false))
+(defonce settings-json-text (r/atom ""))
+
 ;; ── URL routing ───────────────────────────────────────────────
 
 (defn- push-url! [path]
@@ -298,6 +302,35 @@
                    (fetch-items!)))))
       (.catch (fn [err] (js/console.error "Delete list failed:" err)))))
 
+;; ── List Settings API ─────────────────────────────────────────
+
+(defn save-list-settings! []
+  (when-let [lid @current-list-id]
+    (let [text @settings-json-text]
+      (try
+        (js/JSON.parse text)
+        (-> (js/fetch (str "/api/lists/" lid "/settings")
+                      #js {:method  "PUT"
+                           :headers (clj->js (api-headers))
+                           :body    (js/JSON.stringify (clj->js {:settings text}))})
+            (.then (fn [res]
+                     (if (.-ok res)
+                       (.json res)
+                       (-> (.json res)
+                           (.then (fn [data]
+                                    (let [d (js->clj data :keywordize-keys true)]
+                                      (js/alert (str "Error: " (:error d))))))))))
+            (.then (fn [data]
+                     (when data
+                       (let [d (js->clj data :keywordize-keys true)
+                             updated (:list d)]
+                         (swap! lists (fn [ls]
+                                        (mapv #(if (= (:id %) lid) updated %) ls)))
+                         (reset! list-settings-open? false)))))
+            (.catch (fn [err] (js/console.error "Save settings failed:" err))))
+        (catch js/Error e
+          (js/alert (str "Invalid JSON: " (.-message e))))))))
+
 ;; ── Item API calls ────────────────────────────────────────────
 
 (defn fetch-items! []
@@ -345,22 +378,51 @@
 
 ;; ── Item UI helpers ───────────────────────────────────────────
 
-(def status-config
-  {"done"        {:label "Done"        :bg "bg-green-100"  :text "text-green-800"  :dot "bg-green-500"}
-   "ready"       {:label "Ready"       :bg "bg-blue-100"   :text "text-blue-800"   :dot "bg-blue-500"}
-   "in_progress" {:label "In Progress" :bg "bg-amber-100"  :text "text-amber-800"  :dot "bg-amber-500"}
-   "wait"        {:label "Wait"        :bg "bg-gray-100"   :text "text-gray-600"   :dot "bg-gray-400"}
-   "reject"      {:label "Reject"      :bg "bg-red-100"    :text "text-red-800"    :dot "bg-red-500"}
-   "arts"        {:label "Arts"        :bg "bg-purple-100" :text "text-purple-800" :dot "bg-purple-500"}})
+(def color-map
+  {"blue"   {:bg "bg-blue-100"   :text "text-blue-800"   :dot "bg-blue-500"}
+   "green"  {:bg "bg-green-100"  :text "text-green-800"  :dot "bg-green-500"}
+   "amber"  {:bg "bg-amber-100"  :text "text-amber-800"  :dot "bg-amber-500"}
+   "gray"   {:bg "bg-gray-100"   :text "text-gray-600"   :dot "bg-gray-400"}
+   "red"    {:bg "bg-red-100"    :text "text-red-800"    :dot "bg-red-500"}
+   "purple" {:bg "bg-purple-100" :text "text-purple-800" :dot "bg-purple-500"}
+   "slate"  {:bg "bg-slate-100"  :text "text-slate-700"  :dot "bg-slate-500"}
+   "orange" {:bg "bg-orange-100" :text "text-orange-700" :dot "bg-orange-500"}
+   "teal"   {:bg "bg-teal-100"   :text "text-teal-700"   :dot "bg-teal-500"}
+   "cyan"   {:bg "bg-cyan-100"   :text "text-cyan-700"   :dot "bg-cyan-500"}
+   "pink"   {:bg "bg-pink-100"   :text "text-pink-700"   :dot "bg-pink-500"}
+   "indigo" {:bg "bg-indigo-100" :text "text-indigo-700" :dot "bg-indigo-500"}})
 
-(def status-order ["ready" "in_progress" "wait" "arts" "done" "reject"])
+(def default-color {:bg "bg-gray-100" :text "text-gray-600" :dot "bg-gray-400"})
+
+(defn- current-list []
+  (first (filter #(= (:id %) @current-list-id) @lists)))
+
+(defn- current-list-settings []
+  (let [l (current-list)]
+    (or (:settings l)
+        {:statuses [{:key "ready"       :label "Ready"       :color "blue"}
+                    {:key "in_progress" :label "In Progress" :color "amber"}
+                    {:key "wait"        :label "Wait"        :color "gray"}
+                    {:key "arts"        :label "Arts"        :color "purple"}
+                    {:key "done"        :label "Done"        :color "green"}
+                    {:key "reject"      :label "Reject"      :color "red"}]
+         :tags []})))
+
+(defn- settings->status-order []
+  (mapv :key (:statuses (current-list-settings))))
+
+(defn- settings->status-config []
+  (into {}
+    (map (fn [{:keys [key label color]}]
+           [key (merge {:label label} (get color-map color default-color))])
+         (:statuses (current-list-settings)))))
 
 ;; ── Item DnD helpers ─────────────────────────────────────────
 
 (defn- all-item-ids-in-order
   [item-list]
   (let [grouped (group-by :status item-list)]
-    (->> status-order
+    (->> (settings->status-order)
          (mapcat #(map :id (get grouped % [])))
          vec)))
 
@@ -388,7 +450,7 @@
                                     [moved]
                                     (drop idx target-group)))
               new-grouped (assoc grouped new-status new-group)]
-          (->> status-order
+          (->> (settings->status-order)
                (mapcat #(get new-grouped % []))
                vec))))
     (when (not= old-status new-status)
@@ -459,7 +521,7 @@
            "\u2715"]]]))))
 
 (defn- status-column [status col-items]
-  (let [sc (status-config status)
+  (let [sc ((settings->status-config) status)
         is-over? (and @drop-target (= status (:status @drop-target)))]
     [:div {:class (str "flex flex-col bg-gray-100 rounded-lg min-w-0 flex-1 "
                        (when is-over? "ring-2 ring-indigo-300"))
@@ -533,6 +595,35 @@
              :class "px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"}
     "Add"]])
 
+(defn- open-list-settings! []
+  (let [settings (current-list-settings)]
+    (reset! settings-json-text (js/JSON.stringify (clj->js settings) nil 2))
+    (reset! list-settings-open? true)))
+
+(defn- settings-modal []
+  (when @list-settings-open?
+    [:div {:class "fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+           :on-click (fn [e]
+                       (when (= (.-target e) (.-currentTarget e))
+                         (reset! list-settings-open? false)))}
+     [:div {:class "bg-white rounded-lg shadow-xl w-full max-w-lg mx-4"}
+      [:div {:class "flex items-center justify-between px-5 py-4 border-b border-gray-200"}
+       [:span {:class "text-sm font-semibold text-gray-700"} "List Settings"]
+       [:button {:on-click #(reset! list-settings-open? false)
+                 :class "text-gray-400 hover:text-gray-600"} "\u2715"]]
+      [:div {:class "px-5 py-4"}
+       [:textarea {:value @settings-json-text
+                   :on-change #(reset! settings-json-text (.. % -target -value))
+                   :class "w-full h-64 px-3 py-2 text-xs font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                   :spellCheck false}]]
+      [:div {:class "flex justify-end gap-2 px-5 py-3 border-t border-gray-200"}
+       [:button {:on-click #(reset! list-settings-open? false)
+                 :class "px-4 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"}
+        "Cancel"]
+       [:button {:on-click save-list-settings!
+                 :class "px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"}
+        "Save"]]]]))
+
 (defn- list-view []
   (if-not @current-list-id
     [:div {:class "h-full flex items-center justify-center bg-gray-50"}
@@ -544,7 +635,7 @@
        [new-item-input]
        [:div {:class "flex-1 overflow-x-auto overflow-y-hidden p-4"}
         [:div {:class "flex gap-3 h-full"}
-         (for [s status-order]
+         (for [s (settings->status-order)]
            ^{:key s}
            [status-column s (get grouped s [])])]]])))
 
@@ -763,9 +854,17 @@
            {:on-click #(reset! panel-open? true)
             :class "bg-white shadow-md rounded-md px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
             :style {:font-size "18px" :line-height "1"}}
-           "\u2630"])]
+           "\u2630"])
+        [:div {:class "flex-1"}]
+        (when @current-list-id
+          [:button
+           {:on-click open-list-settings!
+            :class "text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
+            :style {:font-size "16px"}}
+           "\u2699"])]
        [:div {:class "flex-1 overflow-hidden"}
-        [list-view]]]
+        [list-view]]
+       [settings-modal]]
       ;; default: graph view
       [graph-view])]])
 
