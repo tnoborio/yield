@@ -36,6 +36,10 @@
 (defonce list-settings-open? (r/atom false))
 (defonce settings-json-text (r/atom ""))
 
+;; Item edit modal state
+(defonce editing-item (r/atom nil))
+(defonce edit-form (r/atom {}))
+
 ;; ── URL routing ───────────────────────────────────────────────
 
 (defn- push-url! [path]
@@ -467,58 +471,49 @@
 
 ;; ── Kanban Board Components ──────────────────────────────────
 
-(defn- board-card [_item]
-  (let [editing? (r/atom false)]
-    (fn [item]
-      (let [{:keys [id title status category due-date]} item
-            cc (category-config category)
-            dragging? (= id @drag-item-id)]
-        [:div {:class (str "bg-white rounded-md border border-gray-200 px-3 py-2 mb-1.5 cursor-grab group shadow-sm hover:shadow-md transition-shadow "
-                           (when dragging? "opacity-30"))
-               :draggable true
-               :on-drag-start (fn [e]
-                                (reset! drag-item-id id)
-                                (.setData (.-dataTransfer e) "text/plain" id)
-                                (set! (.-effectAllowed (.-dataTransfer e)) "move"))
-               :on-drag-end (fn [_]
-                              (reset! drag-item-id nil)
-                              (reset! drop-target nil))}
-         ;; Title
-         [:div {:class "min-w-0 mb-1"}
-          (if @editing?
-            [:input {:default-value title
-                     :auto-focus true
-                     :on-blur (fn [e]
-                                (let [v (.. e -target -value)]
-                                  (when (and (seq v) (not= v title))
-                                    (update-item! id {:title v})))
-                                (reset! editing? false))
-                     :on-key-down (fn [e]
-                                    (when (= (.-key e) "Enter")
-                                      (let [v (.. e -target -value)]
-                                        (when (and (seq v) (not= v title))
-                                          (update-item! id {:title v})))
-                                      (reset! editing? false))
-                                    (when (= (.-key e) "Escape")
-                                      (reset! editing? false)))
-                     :class "w-full px-1 py-0.5 text-xs border border-indigo-400 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"}]
-            [:span {:on-click #(reset! editing? true)
-                    :class (str "text-xs cursor-text block break-words "
-                                (when (= status "done") "line-through text-gray-400"))}
-             title])]
-         ;; Bottom row: category + due date + delete
-         [:div {:class "flex items-center gap-1.5"}
-          (when cc
-            [:span {:class (str "px-1.5 py-0.5 text-[10px] rounded-full " (:bg cc) " " (:text cc))}
-             (:label cc)])
-          (when due-date
-            [:span {:class "text-[10px] text-gray-400"} due-date])
-          [:div {:class "flex-1"}]
-          [:button {:on-click (fn [e]
-                                (.stopPropagation e)
-                                (delete-item! id))
-                    :class "text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs"}
-           "\u2715"]]]))))
+(defn- open-item-edit! [item]
+  (reset! edit-form {:title (:title item)
+                     :description (or (:description item) "")
+                     :status (:status item)
+                     :category (or (:category item) "private")
+                     :due-date (or (:due-date item) "")})
+  (reset! editing-item item))
+
+(defn- board-card [item]
+  (let [{:keys [id title status category due-date]} item
+        cc (category-config category)
+        dragging? (= id @drag-item-id)]
+    [:div {:class (str "bg-white rounded-md border border-gray-200 px-3 py-2 mb-1.5 cursor-grab group shadow-sm hover:shadow-md transition-shadow "
+                       (when dragging? "opacity-30"))
+           :draggable true
+           :on-click (fn [e]
+                       (.stopPropagation e)
+                       (open-item-edit! item))
+           :on-drag-start (fn [e]
+                            (reset! drag-item-id id)
+                            (.setData (.-dataTransfer e) "text/plain" id)
+                            (set! (.-effectAllowed (.-dataTransfer e)) "move"))
+           :on-drag-end (fn [_]
+                          (reset! drag-item-id nil)
+                          (reset! drop-target nil))}
+     ;; Title
+     [:div {:class "min-w-0 mb-1"}
+      [:span {:class (str "text-xs block break-words "
+                          (when (= status "done") "line-through text-gray-400"))}
+       title]]
+     ;; Bottom row: category + due date + delete
+     [:div {:class "flex items-center gap-1.5"}
+      (when cc
+        [:span {:class (str "px-1.5 py-0.5 text-[10px] rounded-full " (:bg cc) " " (:text cc))}
+         (:label cc)])
+      (when due-date
+        [:span {:class "text-[10px] text-gray-400"} due-date])
+      [:div {:class "flex-1"}]
+      [:button {:on-click (fn [e]
+                            (.stopPropagation e)
+                            (delete-item! id))
+                :class "text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs"}
+       "\u2715"]]]))
 
 (defn- status-column [status col-items]
   (let [sc ((settings->status-config) status)
@@ -623,6 +618,100 @@
        [:button {:on-click save-list-settings!
                  :class "px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"}
         "Save"]]]]))
+
+(defn- save-item-edit! []
+  (when-let [item @editing-item]
+    (let [form @edit-form
+          changes (cond-> {}
+                    (not= (:title form) (:title item))
+                    (assoc :title (:title form))
+                    (not= (:description form) (or (:description item) ""))
+                    (assoc :description (:description form))
+                    (not= (:status form) (:status item))
+                    (assoc :status (:status form))
+                    (not= (:category form) (or (:category item) "private"))
+                    (assoc :category (:category form))
+                    (not= (:due-date form) (or (:due-date item) ""))
+                    (assoc :due_date (let [v (:due-date form)] (if (seq v) v nil))))]
+      (when (seq changes)
+        (update-item! (:id item) changes)))
+    (reset! editing-item nil)))
+
+(defn- item-edit-modal []
+  (when-let [item @editing-item]
+    (let [statuses (:statuses (current-list-settings))
+          categories (keys category-config)]
+      [:div {:class "fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+             :on-click (fn [e]
+                         (when (= (.-target e) (.-currentTarget e))
+                           (reset! editing-item nil)))}
+       [:div {:class "bg-white rounded-lg shadow-xl w-full max-w-md mx-4"}
+        ;; Header
+        [:div {:class "flex items-center justify-between px-5 py-4 border-b border-gray-200"}
+         [:span {:class "text-sm font-semibold text-gray-700"} "Edit Item"]
+         [:button {:on-click #(reset! editing-item nil)
+                   :class "text-gray-400 hover:text-gray-600"} "\u2715"]]
+        ;; Body
+        [:div {:class "px-5 py-4 space-y-4"}
+         ;; Title
+         [:div
+          [:label {:class "block text-xs font-medium text-gray-600 mb-1"} "Title"]
+          [:input {:type "text"
+                   :value (:title @edit-form)
+                   :on-change #(swap! edit-form assoc :title (.. % -target -value))
+                   :class "w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"}]]
+         ;; Description
+         [:div
+          [:label {:class "block text-xs font-medium text-gray-600 mb-1"} "Description"]
+          [:textarea {:value (:description @edit-form)
+                      :on-change #(swap! edit-form assoc :description (.. % -target -value))
+                      :rows 3
+                      :class "w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"}]]
+         ;; Status
+         [:div
+          [:label {:class "block text-xs font-medium text-gray-600 mb-1"} "Status"]
+          [:div {:class "flex flex-wrap gap-1.5"}
+           (for [{:keys [key label color]} statuses]
+             (let [colors (get color-map color default-color)
+                   selected? (= key (:status @edit-form))]
+               ^{:key key}
+               [:button {:on-click #(swap! edit-form assoc :status key)
+                         :class (str "px-2.5 py-1 text-xs rounded-full border-2 transition-all "
+                                     (:bg colors) " " (:text colors) " "
+                                     (if selected?
+                                       "border-indigo-500 ring-1 ring-indigo-500"
+                                       "border-transparent hover:border-gray-300"))}
+                label]))]]
+         ;; Category
+         [:div
+          [:label {:class "block text-xs font-medium text-gray-600 mb-1"} "Category"]
+          [:div {:class "flex flex-wrap gap-1.5"}
+           (for [cat-key categories]
+             (let [cc (category-config cat-key)
+                   selected? (= cat-key (:category @edit-form))]
+               ^{:key cat-key}
+               [:button {:on-click #(swap! edit-form assoc :category cat-key)
+                         :class (str "px-2.5 py-1 text-xs rounded-full border-2 transition-all "
+                                     (:bg cc) " " (:text cc) " "
+                                     (if selected?
+                                       "border-indigo-500 ring-1 ring-indigo-500"
+                                       "border-transparent hover:border-gray-300"))}
+                (:label cc)]))]]
+         ;; Due date
+         [:div
+          [:label {:class "block text-xs font-medium text-gray-600 mb-1"} "Due Date"]
+          [:input {:type "date"
+                   :value (:due-date @edit-form)
+                   :on-change #(swap! edit-form assoc :due-date (.. % -target -value))
+                   :class "px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"}]]]
+        ;; Footer
+        [:div {:class "flex justify-end gap-2 px-5 py-3 border-t border-gray-200"}
+         [:button {:on-click #(reset! editing-item nil)
+                   :class "px-4 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"}
+          "Cancel"]
+         [:button {:on-click save-item-edit!
+                   :class "px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"}
+          "Save"]]]])))
 
 (defn- list-view []
   (if-not @current-list-id
@@ -864,7 +953,8 @@
            "\u2699"])]
        [:div {:class "flex-1 overflow-hidden"}
         [list-view]]
-       [settings-modal]]
+       [settings-modal]
+       [item-edit-modal]]
       ;; default: graph view
       [graph-view])]])
 
